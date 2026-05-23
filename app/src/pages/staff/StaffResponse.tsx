@@ -61,9 +61,9 @@ export function StaffResponse() {
   // マウント時にトップへスクロール（アプリ内ブラウザのリンク遷移対策）
   useEffect(() => { window.scrollTo(0, 0) }, [])
 
-  // ローカルデータがあればそちらを使う（管理者デバイス）
+  // GAS URLがある場合はGASモード優先（管理者デバイスでもスタッフ側の正確なデータを使う）
   const localShiftMonth = data.shiftMonths.find(m => m.id === monthId)
-  const isAdminMode = !!localShiftMonth
+  const isAdminMode = !!localShiftMonth && !gasUrl
 
   const shiftMonth = localShiftMonth ?? gasData?.shiftMonth
   const slots = isAdminMode
