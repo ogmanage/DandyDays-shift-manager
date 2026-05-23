@@ -111,7 +111,24 @@ export function useStore() {
       const remoteData = await loadAllData(token, sheetId)
 
       // 管理者権限チェック
-      const member = remoteData.members.find(m => m.email === userInfo.email)
+      let member = remoteData.members.find(m => m.email === userInfo.email)
+
+      // メンバーが0人 or 自分が未登録の場合 → 最初のログインは自動で管理者登録
+      if (!member && remoteData.members.filter(m => m.role === 'admin').length === 0) {
+        const newMember: Member = {
+          id: generateId(),
+          name: userInfo.name,
+          email: userInfo.email,
+          city: '',
+          role: 'admin',
+          createdAt: new Date().toISOString(),
+          lastAccessedAt: new Date().toISOString(),
+        }
+        await appendRow(token, sheetId, 'members', newMember as unknown as Record<string, unknown>)
+        remoteData.members = [...remoteData.members, newMember]
+        member = newMember
+      }
+
       if (!member || member.role !== 'admin') {
         throw new Error(
           '管理者権限がありません。\n' +
