@@ -53,11 +53,10 @@ export function StaffResponse() {
 
   const [memberId, setMemberId] = useState<string | null>(() => localStorage.getItem(STORAGE_KEY))
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [city, setCity] = useState('')
   const [regError, setRegError] = useState('')
   const [regLoading, setRegLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [liffIniting, setLiffIniting] = useState(false)
 
   // マウント時にトップへスクロール（アプリ内ブラウザのリンク遷移対策）
   useEffect(() => { window.scrollTo(0, 0) }, [])
@@ -136,33 +135,95 @@ export function StaffResponse() {
     }
   }, [memberId, isAdminMode, monthId])
 
+  // ─── LIFF 自動認証（LINEアプリ内から開いた場合） ────────────────
+  useEffect(() => {
+    const LIFF_ID = import.meta.env.VITE_LIFF_ID as string | undefined
+    if (!LIFF_ID || isAdminMode || !gasUrl || !monthId) return
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const liff = (window as any).liff
+    if (!liff) return
+
+    setLiffIniting(true)
+
+    liff.init({ liffId: LIFF_ID })
+      .then(async () => {
+        // LINEアプリ内 or すでにログイン済みのみ自動認証
+        if (!liff.isInClient() && !liff.isLoggedIn()) {
+          setLiffIniting(false)
+          return
+        }
+        const profile = await liff.getProfile()
+
+        // 同じLINEユーザーがすでにこの端末に登録済みならスキップ
+        const cachedId = localStorage.getItem(STORAGE_KEY)
+        const cachedLineId = localStorage.getItem('line_user_id')
+        if (cachedId && cachedLineId === profile.userId) {
+          setMemberId(cachedId)
+          const saved = loadSavedResponses(monthId, cachedId)
+          if (saved.length > 0) setLocalResponses(saved)
+          setLiffIniting(false)
+          return
+        }
+
+        // GAS経由で登録/更新
+        const newId = crypto.randomUUID()
+        const res = await gasPost<{ member: { id: string } }>(gasUrl, {
+          action: 'addMember',
+          id: newId,
+          lineUserId: profile.userId,
+          name: profile.displayName,
+          email: '',
+          city: '',
+          role: 'user',
+          createdAt: new Date().toISOString(),
+          lastAccessedAt: new Date().toISOString(),
+        })
+        const id = res.member?.id ?? newId
+        setMemberId(id)
+        localStorage.setItem(STORAGE_KEY, id)
+        localStorage.setItem('line_user_id', profile.userId)
+        localStorage.setItem('staff_name', profile.displayName)
+        const saved = loadSavedResponses(monthId, id)
+        if (saved.length > 0) setLocalResponses(saved)
+      })
+      .catch((err: unknown) => {
+        console.error('LIFF auth failed:', err)
+      })
+      .finally(() => setLiffIniting(false))
+  }, [isAdminMode, gasUrl, monthId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleRegister = async () => {
-    if (!name.trim() || !email.trim()) { setRegError('名前とメールは必須です'); return }
+    if (!name.trim()) { setRegError('名前を入力してください'); return }
     setRegLoading(true)
     setRegError('')
     try {
       if (isAdminMode) {
-        const existing = data.members.find(m => m.email === email.trim())
+        const existing = data.members.find(m => m.name === name.trim())
         if (existing) {
           setMemberId(existing.id)
           localStorage.setItem(STORAGE_KEY, existing.id)
         } else {
-          const newMember = addMember({ name: name.trim(), email: email.trim(), city: city.trim() })
+          const newMember = addMember({ name: name.trim(), email: `anon_${crypto.randomUUID()}@line`, city: '' })
           setMemberId(newMember.id)
           localStorage.setItem(STORAGE_KEY, newMember.id)
         }
       } else if (gasUrl) {
         const newId = crypto.randomUUID()
-        const memberData = {
-          id: newId, name: name.trim(), email: email.trim(), city: city.trim(),
-          role: 'user', createdAt: new Date().toISOString(), lastAccessedAt: new Date().toISOString(),
-        }
-        const res = await gasPost<{ member: { id: string } }>(gasUrl, { action: 'addMember', ...memberData })
+        const res = await gasPost<{ member: { id: string } }>(gasUrl, {
+          action: 'addMember',
+          id: newId,
+          name: name.trim(),
+          email: `anon_${newId}@line`,
+          city: '',
+          role: 'user',
+          createdAt: new Date().toISOString(),
+          lastAccessedAt: new Date().toISOString(),
+        })
         const id = res.member?.id ?? newId
         setMemberId(id)
         localStorage.setItem(STORAGE_KEY, id)
         localStorage.setItem('staff_name', name.trim())
-        // 登録後、localStorageの過去回答を読み込む
         if (monthId) {
           const saved = loadSavedResponses(monthId, id)
           if (saved.length > 0) setLocalResponses(saved)
@@ -281,7 +342,20 @@ export function StaffResponse() {
     )
   }
 
-  // ─── 未登録 → 登録フォーム ────────────────────
+  // ─── LIFF 認証中 ─────────────────────────────
+  if (liffIniting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-dandy-50 to-dandy-100 p-4">
+        <div className="bg-white rounded-2xl shadow-lg w-full max-w-sm p-8 text-center space-y-4">
+          <Loader2 size={36} className="animate-spin text-dandy-500 mx-auto" />
+          <p className="text-gray-700 font-medium">LINE認証中...</p>
+          <p className="text-xs text-gray-400">しばらくお待ちください</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ─── 未登録 → 登録フォーム（LINEアプリ外からアクセスした場合） ────
   if (!memberId || (!isAdminMode && !localStorage.getItem('staff_name'))) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-dandy-50 to-dandy-100 p-4">
@@ -291,36 +365,24 @@ export function StaffResponse() {
               <span className="text-white text-xl">📅</span>
             </div>
             <h1 className="font-bold text-gray-800">{shiftMonth.year}年{shiftMonth.month}月 シフト希望</h1>
-            <p className="text-sm text-gray-500 mt-1">はじめに情報を登録してください</p>
+            <p className="text-sm text-gray-500 mt-1">LINEの表示名を入力してください</p>
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">名前 *</label>
+              <label className="block text-sm font-medium mb-1">LINE名 *</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)}
                 placeholder="田中 花子"
                 className="w-full border rounded-lg px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">メールアドレス *</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="hanako@example.com"
-                className="w-full border rounded-lg px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">住所（市区町村）</label>
-              <input type="text" value={city} onChange={e => setCity(e.target.value)}
-                placeholder="横浜市"
-                className="w-full border rounded-lg px-3 py-2 text-sm" />
-              <p className="text-xs text-amber-600 mt-1 bg-amber-50 rounded px-2 py-1">
-                ⚠️ 横浜市・葛飾区 など<span className="font-medium">市区町村まで</span>ご入力ください
-              </p>
             </div>
             {regError && <p className="text-red-500 text-xs">{regError}</p>}
             <button onClick={handleRegister} disabled={regLoading}
               className="w-full bg-dandy-500 hover:bg-dandy-600 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
               {regLoading && <Loader2 size={14} className="animate-spin" />}
-              登録してシフトを見る
+              シフトを見る
             </button>
+            <p className="text-xs text-gray-400 text-center">
+              LINEのトークから開くと自動でログインできます
+            </p>
           </div>
         </div>
       </div>

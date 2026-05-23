@@ -121,9 +121,13 @@ export function ShiftManagement() {
     })
   }, [selYear, selMonth])
 
-  const shareUrl = currentMonth?.status === 'published'
-    ? `${window.location.origin}${window.location.pathname}#/s/${currentMonth.id}${gasUrl ? `?gas=${encodeURIComponent(gasUrl)}` : ''}`
-    : null
+  const shareUrl = currentMonth?.status === 'published' ? (() => {
+    const LIFF_ID = import.meta.env.VITE_LIFF_ID as string | undefined
+    const route = `#/s/${currentMonth.id}${gasUrl ? `?gas=${encodeURIComponent(gasUrl)}` : ''}`
+    return LIFF_ID
+      ? `https://liff.line.me/${LIFF_ID}?liff.state=${encodeURIComponent(route)}`
+      : `${window.location.origin}${window.location.pathname}${route}`
+  })() : null
 
   const pendingSlots = slots.filter(s => s.status !== 'confirmed')
   const confirmedSlots = slots.filter(s => s.status === 'confirmed')

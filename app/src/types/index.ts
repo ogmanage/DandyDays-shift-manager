@@ -10,6 +10,7 @@ export interface Member {
   role: Role
   createdAt: string
   lastAccessedAt: string
+  lineUserId?: string
 }
 
 export interface ShiftMonth {

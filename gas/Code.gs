@@ -80,16 +80,64 @@ function doPost(e) {
   }
 }
 
-// ─── メンバー追加（メールで重複チェック）──────────────────────────
+// membersシートのヘッダー定義（lineUserIdを含む）
+var MEMBER_HEADERS = ['id','name','email','city','role','createdAt','lastAccessedAt','lineUserId'];
+
+// membersシートにlineUserId列が存在しない場合は追加する
+function ensureMemberColumns(sheet) {
+  var lastCol = sheet.getLastColumn();
+  if (lastCol === 0) return;
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+  MEMBER_HEADERS.forEach(function(h) {
+    if (headers.indexOf(h) === -1) {
+      sheet.getRange(1, lastCol + 1).setValue(h);
+      lastCol++;
+    }
+  });
+}
+
+// ─── メンバー追加（LINE IDまたはメールで重複チェック）────────────────
 function handleAddMember(body) {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = ss.getSheetByName('members');
+  ensureMemberColumns(sheet);
   var members = sheetToObjects(sheet);
 
-  // メールアドレスで既存メンバーを検索
-  var existing = members.find(function(m) { return m.email === body.email; });
+  // ① LINE IDで既存メンバーを検索（LIFF経由）
+  if (body.lineUserId) {
+    var existingLine = members.find(function(m) { return m.lineUserId === body.lineUserId; });
+    if (existingLine) {
+      // 名前とlastAccessedAtを更新
+      updateRowByKey(sheet, 'id', existingLine.id, {
+        id: existingLine.id,
+        name: body.name || existingLine.name,
+        email: existingLine.email || '',
+        city: existingLine.city || '',
+        role: existingLine.role || 'user',
+        createdAt: existingLine.createdAt,
+        lastAccessedAt: new Date().toISOString(),
+        lineUserId: body.lineUserId,
+      }, MEMBER_HEADERS);
+      return jsonResponse({ member: { ...existingLine, name: body.name || existingLine.name } });
+    }
+    // 新規LINEメンバー
+    var newLineMember = {
+      id: body.id || Utilities.getUuid(),
+      name: body.name || '',
+      email: '',
+      city: '',
+      role: 'user',
+      createdAt: new Date().toISOString(),
+      lastAccessedAt: new Date().toISOString(),
+      lineUserId: body.lineUserId,
+    };
+    appendRow(sheet, newLineMember, MEMBER_HEADERS);
+    return jsonResponse({ member: newLineMember });
+  }
+
+  // ② メールアドレスで既存メンバーを検索（従来方式・フォールバック）
+  var existing = members.find(function(m) { return body.email && m.email === body.email; });
   if (existing) {
-    // 既存メンバーのlastAccessedAtを更新
     updateRowByKey(sheet, 'id', existing.id, {
       id: existing.id,
       name: existing.name,
@@ -98,7 +146,8 @@ function handleAddMember(body) {
       role: existing.role,
       createdAt: existing.createdAt,
       lastAccessedAt: new Date().toISOString(),
-    }, ['id','name','email','city','role','createdAt','lastAccessedAt']);
+      lineUserId: existing.lineUserId || '',
+    }, MEMBER_HEADERS);
     return jsonResponse({ member: existing });
   }
 
@@ -111,8 +160,9 @@ function handleAddMember(body) {
     role: 'user',
     createdAt: body.createdAt || new Date().toISOString(),
     lastAccessedAt: new Date().toISOString(),
+    lineUserId: '',
   };
-  appendRow(sheet, newMember, ['id','name','email','city','role','createdAt','lastAccessedAt']);
+  appendRow(sheet, newMember, MEMBER_HEADERS);
   return jsonResponse({ member: newMember });
 }
 
