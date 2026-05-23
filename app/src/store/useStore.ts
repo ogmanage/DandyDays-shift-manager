@@ -372,6 +372,31 @@ export function useStore() {
     return newSlots.length
   }, [data.shiftMonths, data.shiftSlots, update, syncToSheets])
 
+  const unconfirmShiftSlot = useCallback((slotId: string) => {
+    let updatedSlot: ShiftSlot | undefined
+    const updatedResponses: StaffResponse[] = []
+    update(prev => {
+      const slots = prev.shiftSlots.map(s => {
+        if (s.id !== slotId) return s
+        updatedSlot = { ...s, status: 'published' as const }
+        return updatedSlot
+      })
+      const responses = prev.staffResponses.map(r => {
+        if (r.shiftSlotId !== slotId) return r
+        const updated = { ...r, isAssigned: false }
+        updatedResponses.push(updated)
+        return updated
+      })
+      return { ...prev, shiftSlots: slots, staffResponses: responses }
+    })
+    syncToSheets(async (token, id) => {
+      if (updatedSlot) await updateRowById(token, id, 'shift_slots', updatedSlot as unknown as Record<string, unknown>)
+      for (const r of updatedResponses) {
+        await updateRowById(token, id, 'staff_responses', r as unknown as Record<string, unknown>)
+      }
+    })
+  }, [update, syncToSheets])
+
   const confirmShiftSlot = useCallback((slotId: string, assignedMemberIds: string[]) => {
     const assignedAdmins = data.members.filter(m => assignedMemberIds.includes(m.id) && m.role === 'admin')
     if (assignedAdmins.length === 0) throw new Error('各キッチンカーに管理者が最低1名必要です')
@@ -444,7 +469,7 @@ export function useStore() {
     loginWithGoogle, createNewSheet, connectExistingSheet, disconnectSheet, logout, refreshData, changeSheet,
     addMember, updateMember, updateMemberRole, deleteMember,
     createShiftMonth, publishShiftMonth, closeShiftMonth,
-    addShiftSlot, updateShiftSlot, deleteShiftSlot, copyShiftSlots, confirmShiftSlot,
+    addShiftSlot, updateShiftSlot, deleteShiftSlot, copyShiftSlots, confirmShiftSlot, unconfirmShiftSlot,
     submitResponse, getSlotResponses, deleteStaffResponse,
   }
 }

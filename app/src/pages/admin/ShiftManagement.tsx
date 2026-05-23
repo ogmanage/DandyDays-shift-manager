@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { format, getDaysInMonth, parseISO } from 'date-fns'
 import { ja } from 'date-fns/locale'
-import { Plus, Trash2, Copy, Share2, Lock, ChevronDown, ChevronUp, UserCheck, CheckCircle2, AlertCircle, Pencil, X, RefreshCw, MessageSquare } from 'lucide-react'
+import { Plus, Trash2, Copy, Share2, Lock, ChevronDown, ChevronUp, UserCheck, CheckCircle2, AlertCircle, Pencil, X, RefreshCw, MessageSquare, RotateCcw, CalendarDays } from 'lucide-react'
 import { useStoreContext } from '@/store/StoreContext'
 import { getGasUrl, saveGasUrl } from '@/services/gasService'
 import { Modal } from '@/components/Modal'
@@ -13,7 +13,7 @@ type Tab = 'slots' | 'responses' | 'confirmed' | 'calendar'
 
 export function ShiftManagement() {
   const { data, createShiftMonth, addShiftSlot, updateShiftSlot, deleteShiftSlot,
-          publishShiftMonth, closeShiftMonth, copyShiftSlots, confirmShiftSlot,
+          publishShiftMonth, closeShiftMonth, copyShiftSlots, confirmShiftSlot, unconfirmShiftSlot,
           getSlotResponses, deleteStaffResponse, submitResponse, refreshData, isLoadingSheets } = useStoreContext()
 
   const now = new Date()
@@ -49,6 +49,18 @@ export function ShiftManagement() {
 
   // LINE共有テキスト
   const [lineCopied, setLineCopied] = useState(false)
+  const [calendarCopied, setCalendarCopied] = useState(false)
+
+  const publicCalendarUrl = currentMonth && gasUrl
+    ? `${window.location.origin}${window.location.pathname}#/cal/${currentMonth.id}?gas=${encodeURIComponent(gasUrl)}`
+    : null
+
+  const handleCopyCalendarUrl = () => {
+    if (!publicCalendarUrl) return
+    navigator.clipboard.writeText(publicCalendarUrl)
+    setCalendarCopied(true)
+    setTimeout(() => setCalendarCopied(false), 2000)
+  }
 
   const generateLineText = () => {
     const lines: string[] = [`📅 ${selYear}年${selMonth}月 確定シフト\n`]
@@ -549,6 +561,23 @@ export function ShiftManagement() {
                 {lineCopied ? '✓ コピー済み' : 'テキストをコピー'}
               </button>
             </div>
+            {/* 公開カレンダーURL */}
+            {publicCalendarUrl ? (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-3">
+                <CalendarDays size={16} className="text-blue-600 shrink-0" />
+                <p className="text-xs text-blue-800 flex-1">全員が見られる公開カレンダーURLをコピーします</p>
+                <button
+                  onClick={handleCopyCalendarUrl}
+                  className="text-xs font-bold bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 shrink-0 transition-colors">
+                  {calendarCopied ? '✓ コピー済み' : 'URLをコピー'}
+                </button>
+              </div>
+            ) : (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 flex items-center gap-3 opacity-60">
+                <CalendarDays size={16} className="text-gray-400 shrink-0" />
+                <p className="text-xs text-gray-500 flex-1">GAS URLを設定すると公開カレンダーURLが発行できます</p>
+              </div>
+            )}
             {Array.from(slotsByDate.entries()).map(([date, daySlots]) => {
               const confirmed = daySlots.filter(s => s.status === 'confirmed')
               if (confirmed.length === 0) return null
@@ -571,10 +600,24 @@ export function ShiftManagement() {
                         .filter(Boolean)
                       return (
                         <div key={slot.id} className="px-4 py-3">
-                          <div className="flex items-center gap-2 mb-2">
-                            <CheckCircle2 size={15} className="text-green-500 shrink-0" />
-                            <span className="font-medium text-sm">{slot.locationName}</span>
-                            <Badge label="確定" variant="green" />
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 size={15} className="text-green-500 shrink-0" />
+                              <span className="font-medium text-sm">{slot.locationName}</span>
+                              <Badge label="確定" variant="green" />
+                            </div>
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => openConfirm(slot)}
+                                className="flex items-center gap-1 text-xs border border-dandy-300 text-dandy-600 px-2.5 py-1.5 rounded-lg hover:bg-dandy-50">
+                                <Pencil size={11} /> 担当変更
+                              </button>
+                              <button
+                                onClick={() => { if (confirm('確定を取り消してシフト希望タブに戻しますか？')) unconfirmShiftSlot(slot.id) }}
+                                className="flex items-center gap-1 text-xs border border-red-300 text-red-500 px-2.5 py-1.5 rounded-lg hover:bg-red-50">
+                                <RotateCcw size={11} /> 確定取り消し
+                              </button>
+                            </div>
                           </div>
                           <div className="space-y-0.5 pl-5">
                             {assigned.map(m => m && (

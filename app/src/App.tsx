@@ -6,6 +6,7 @@ import { Dashboard } from '@/pages/admin/Dashboard'
 import { ShiftManagement } from '@/pages/admin/ShiftManagement'
 import { StaffManagement } from '@/pages/admin/StaffManagement'
 import { StaffResponse } from '@/pages/staff/StaffResponse'
+import { PublicCalendar } from '@/pages/staff/PublicCalendar'
 
 function AdminGuard() {
   const { currentAdmin } = useStoreContext()
@@ -22,6 +23,7 @@ function AppRoutes() {
     <Routes>
       {/* バイト向け（認証不要） */}
       <Route path="/s/:monthId" element={<StaffResponse />} />
+      <Route path="/cal/:monthId" element={<PublicCalendar />} />
 
       {/* 管理者向け */}
       <Route path="/admin/login" element={<Login />} />
