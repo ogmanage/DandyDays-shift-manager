@@ -36,22 +36,42 @@ function doGet(e) {
     var allSlots = sheetToObjects(slotsSheet);
     var slots = allSlots.filter(function(s) { return s.shiftMonthId === monthId; });
 
-    var result = {
-      shiftMonth: castMonth(shiftMonth),
-      slots: slots.map(castSlot),
-    };
+    // レスポンス・メンバー情報を取得
+    var responsesSheet = ss.getSheetByName('staff_responses');
+    var allResponses = sheetToObjects(responsesSheet);
+    var slotIds = slots.map(function(s) { return s.id; });
 
-    // memberIdが指定されていれば既存回答も返す（過去履歴の復元用）
+    var responses;
     if (memberId) {
-      var responsesSheet = ss.getSheetByName('staff_responses');
-      var allResponses = sheetToObjects(responsesSheet);
-      var slotIds = slots.map(function(s) { return s.id; });
-      result.responses = allResponses
+      // 特定メンバーの回答のみ（バイト向け回答ページ用）
+      responses = allResponses
         .filter(function(r) {
           return r.memberId === memberId && slotIds.indexOf(r.shiftSlotId) !== -1;
         })
         .map(castResponse);
+    } else {
+      // 全回答を返す（公開カレンダー用）
+      responses = allResponses
+        .filter(function(r) { return slotIds.indexOf(r.shiftSlotId) !== -1; })
+        .map(castResponse);
     }
+
+    // アサイン済みメンバーの名前を返す
+    var assignedMemberIds = responses
+      .filter(function(r) { return r.isAssigned; })
+      .map(function(r) { return r.memberId; });
+    var membersSheet = ss.getSheetByName('members');
+    var allMembers = sheetToObjects(membersSheet);
+    var members = allMembers
+      .filter(function(m) { return assignedMemberIds.indexOf(m.id) !== -1; })
+      .map(function(m) { return { id: m.id, name: m.name }; });
+
+    var result = {
+      shiftMonth: castMonth(shiftMonth),
+      slots: slots.map(castSlot),
+      responses: responses,
+      members: members,
+    };
 
     return jsonResponse(result);
   } catch (err) {

@@ -4,14 +4,17 @@ import { format, getDaysInMonth, parseISO } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { gasGet } from '@/services/gasService'
 import { ShiftMonth, ShiftSlot, StaffResponse } from '@/types'
-import { Loader2, CalendarDays } from 'lucide-react'
+import { Loader2, CalendarDays, X, Users } from 'lucide-react'
 
 const DOW = ['日', '月', '火', '水', '木', '金', '土']
+
+interface PublicMember { id: string; name: string }
 
 interface GasData {
   shiftMonth: ShiftMonth
   slots: ShiftSlot[]
   responses: StaffResponse[]
+  members: PublicMember[]
 }
 
 export function PublicCalendar() {
@@ -22,14 +25,12 @@ export function PublicCalendar() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [gasData, setGasData] = useState<GasData | null>(null)
+  const [popupSlot, setPopupSlot] = useState<ShiftSlot | null>(null)
 
   useEffect(() => {
     if (!monthId || !gasUrl) { setError('URLが不正です'); setLoading(false); return }
     gasGet<GasData>(gasUrl, { monthId })
-      .then(d => {
-        setGasData(d)
-        // メンバー名はレスポンスから取れないのでIDのみ表示
-      })
+      .then(d => setGasData(d))
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
   }, [monthId, gasUrl])
@@ -51,7 +52,7 @@ export function PublicCalendar() {
     </div>
   )
 
-  const { shiftMonth, slots } = gasData
+  const { shiftMonth, slots, responses = [], members = [] } = gasData
   const confirmedSlots = slots.filter(s => s.status === 'confirmed')
 
   const firstDow = new Date(shiftMonth.year, shiftMonth.month - 1, 1).getDay()
@@ -67,6 +68,13 @@ export function PublicCalendar() {
     if (!slotsByDate.has(s.date)) slotsByDate.set(s.date, [])
     slotsByDate.get(s.date)!.push(s)
   })
+
+  const getAssignedMembers = (slotId: string): PublicMember[] => {
+    const assignedIds = responses
+      .filter(r => r.shiftSlotId === slotId && r.isAssigned)
+      .map(r => r.memberId)
+    return members.filter(m => assignedIds.includes(m.id))
+  }
 
   const now = new Date()
 
@@ -114,10 +122,11 @@ export function PublicCalendar() {
                         </p>
                         <div className="space-y-0.5">
                           {daySlots.map(slot => (
-                            <div key={slot.id}
-                              className="text-xs rounded px-1 py-0.5 truncate leading-tight bg-green-100 text-green-700 border border-green-200">
+                            <button key={slot.id}
+                              onClick={() => setPopupSlot(slot)}
+                              className="w-full text-left text-xs rounded px-1 py-0.5 truncate leading-tight bg-green-100 text-green-700 border border-green-200 hover:bg-green-200 active:bg-green-300">
                               {slot.locationName}
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>
@@ -145,12 +154,25 @@ export function PublicCalendar() {
                         </span>
                       </div>
                       <div className="divide-y">
-                        {daySlots.map(slot => (
-                          <div key={slot.id} className="px-4 py-3">
-                            <p className="font-medium text-sm text-gray-800">{slot.locationName}</p>
-                            {slot.note && <p className="text-xs text-gray-400 mt-0.5">{slot.note}</p>}
-                          </div>
-                        ))}
+                        {daySlots.map(slot => {
+                          const assigned = getAssignedMembers(slot.id)
+                          return (
+                            <button key={slot.id}
+                              onClick={() => setPopupSlot(slot)}
+                              className="w-full text-left px-4 py-3 hover:bg-gray-50 active:bg-gray-100">
+                              <p className="font-medium text-sm text-gray-800">{slot.locationName}</p>
+                              {assigned.length > 0 ? (
+                                <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                                  <Users size={11} />
+                                  {assigned.map(m => m.name).join('・')}
+                                </p>
+                              ) : (
+                                <p className="text-xs text-gray-400 mt-0.5">担当未定</p>
+                              )}
+                              {slot.note && <p className="text-xs text-gray-400 mt-0.5">{slot.note}</p>}
+                            </button>
+                          )
+                        })}
                       </div>
                     </div>
                   )
@@ -159,6 +181,54 @@ export function PublicCalendar() {
           </>
         )}
       </div>
+
+      {/* メンバーポップアップ */}
+      {popupSlot && (() => {
+        const assigned = getAssignedMembers(popupSlot.id)
+        const d = parseISO(popupSlot.date)
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-4"
+            onClick={() => setPopupSlot(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm p-5 space-y-4"
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-bold text-gray-800">
+                    {format(d, 'M月d日(E)', { locale: ja })}
+                  </p>
+                  <p className="text-dandy-600 font-semibold mt-0.5">{popupSlot.locationName}</p>
+                </div>
+                <button onClick={() => setPopupSlot(null)}
+                  className="text-gray-400 hover:text-gray-600 p-1">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-2">担当スタッフ</p>
+                {assigned.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {assigned.map(m => (
+                      <div key={m.id} className="flex items-center gap-2 bg-green-50 rounded-lg px-3 py-2">
+                        <div className="w-6 h-6 rounded-full bg-green-200 flex items-center justify-center text-xs font-bold text-green-700">
+                          {m.name[0]}
+                        </div>
+                        <span className="text-sm font-medium text-gray-800">{m.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 text-center py-3">担当者が未定です</p>
+                )}
+              </div>
+
+              {popupSlot.note && (
+                <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">{popupSlot.note}</p>
+              )}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
