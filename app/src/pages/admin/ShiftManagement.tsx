@@ -562,23 +562,6 @@ export function ShiftManagement() {
                 {lineCopied ? '✓ コピー済み' : 'テキストをコピー'}
               </button>
             </div>
-            {/* 公開カレンダーURL */}
-            {publicCalendarUrl ? (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-3">
-                <CalendarDays size={16} className="text-blue-600 shrink-0" />
-                <p className="text-xs text-blue-800 flex-1">全員が見られる公開カレンダーURLをコピーします</p>
-                <button
-                  onClick={handleCopyCalendarUrl}
-                  className="text-xs font-bold bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 shrink-0 transition-colors">
-                  {calendarCopied ? '✓ コピー済み' : 'URLをコピー'}
-                </button>
-              </div>
-            ) : (
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 flex items-center gap-3 opacity-60">
-                <CalendarDays size={16} className="text-gray-400 shrink-0" />
-                <p className="text-xs text-gray-500 flex-1">GAS URLを設定すると公開カレンダーURLが発行できます</p>
-              </div>
-            )}
             {Array.from(slotsByDate.entries()).map(([date, daySlots]) => {
               const confirmed = daySlots.filter(s => s.status === 'confirmed')
               if (confirmed.length === 0) return null
@@ -643,19 +626,31 @@ export function ShiftManagement() {
       {/* ── タブ4: カレンダー（②） ── */}
       {activeTab === 'calendar' && (
         <div className="bg-white rounded-xl border overflow-hidden">
-          <div className="bg-gray-50 px-4 py-3 border-b flex items-center justify-between">
+          <div className="bg-gray-50 px-4 py-3 border-b flex items-center justify-between gap-2 flex-wrap">
             <h2 className="font-semibold text-gray-700">{selYear}年{selMonth}月 シフトカレンダー</h2>
-            <button
-              onClick={() => {
-                if (window.innerWidth < 640) {
-                  alert('スクリーンショットで保存してください\n\niOS: サイドボタン＋音量ボタン\nAndroid: 電源ボタン＋音量ダウン')
-                } else {
-                  window.print()
-                }
-              }}
-              className="text-xs border px-4 py-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 text-gray-600 min-h-[40px]">
-              印刷・保存
-            </button>
+            <div className="flex items-center gap-2">
+              {publicCalendarUrl ? (
+                <button
+                  onClick={handleCopyCalendarUrl}
+                  className="flex items-center gap-1.5 text-xs font-bold bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                  <CalendarDays size={13} />
+                  {calendarCopied ? '✓ コピー済み' : '公開URLをコピー'}
+                </button>
+              ) : (
+                <span className="text-xs text-gray-400">GAS URL未設定</span>
+              )}
+              <button
+                onClick={() => {
+                  if (window.innerWidth < 640) {
+                    alert('スクリーンショットで保存してください\n\niOS: サイドボタン＋音量ボタン\nAndroid: 電源ボタン＋音量ダウン')
+                  } else {
+                    window.print()
+                  }
+                }}
+                className="text-xs border px-4 py-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 text-gray-600 min-h-[40px]">
+                印刷・保存
+              </button>
+            </div>
           </div>
           <div className="p-2">
             {/* 凡例 */}
