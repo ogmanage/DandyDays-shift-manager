@@ -439,7 +439,39 @@ export function StaffResponse() {
               <div className="divide-y">
                 {daySlots.map(slot => {
                   const resp = myResponses.find(r => r.shiftSlotId === slot.id)
+                  const isConfirmed = slot.status === 'confirmed'
+                  const isAssigned = resp?.isAssigned === true
                   const isSelected = resp?.isAvailable === true
+
+                  // 確定済みスロット：タップ不可・ロック表示
+                  if (isConfirmed) {
+                    return (
+                      <div key={slot.id}
+                        className={`w-full flex items-center justify-between px-4 py-4
+                          ${isAssigned ? 'bg-green-50' : 'bg-gray-50'}`}>
+                        <div className="flex-1 min-w-0 pr-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className={`font-medium text-sm leading-snug ${isAssigned ? 'text-green-700' : 'text-gray-500'}`}>
+                              {slot.locationName}
+                            </p>
+                            <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium
+                              ${isAssigned ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
+                              {isAssigned ? '✓ あなたのシフト' : '確定済み'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            必要: {slot.requiredCount}名
+                            {slot.note && <> ・ {slot.note}</>}
+                          </p>
+                        </div>
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0
+                          ${isAssigned ? 'bg-green-500' : 'bg-gray-300'}`}>
+                          <CheckCircle2 size={15} className="text-white" />
+                        </div>
+                      </div>
+                    )
+                  }
+
                   return (
                     <button key={slot.id} onClick={() => handleToggle(slot.id)}
                       className={`w-full flex items-center justify-between px-4 py-4 text-left transition-colors
