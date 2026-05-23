@@ -51,17 +51,6 @@ export function ShiftManagement() {
   const [lineCopied, setLineCopied] = useState(false)
   const [calendarCopied, setCalendarCopied] = useState(false)
 
-  const publicCalendarUrl = currentMonth && gasUrl
-    ? `${window.location.origin}${window.location.pathname}#/cal/${currentMonth.id}?gas=${encodeURIComponent(gasUrl)}`
-    : null
-
-  const handleCopyCalendarUrl = () => {
-    if (!publicCalendarUrl) return
-    navigator.clipboard.writeText(publicCalendarUrl)
-    setCalendarCopied(true)
-    setTimeout(() => setCalendarCopied(false), 2000)
-  }
-
   const generateLineText = () => {
     const lines: string[] = [`📅 ${selYear}年${selMonth}月 確定シフト\n`]
     Array.from(slotsByDate.entries()).forEach(([date, daySlots]) => {
@@ -106,6 +95,18 @@ export function ShiftManagement() {
   }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const currentMonth = data.shiftMonths.find(m => m.year === selYear && m.month === selMonth)
+
+  const publicCalendarUrl = currentMonth && gasUrl
+    ? `${window.location.origin}${window.location.pathname}#/cal/${currentMonth.id}?gas=${encodeURIComponent(gasUrl)}`
+    : null
+
+  const handleCopyCalendarUrl = () => {
+    if (!publicCalendarUrl) return
+    navigator.clipboard.writeText(publicCalendarUrl)
+    setCalendarCopied(true)
+    setTimeout(() => setCalendarCopied(false), 2000)
+  }
+
   const slots = useMemo(
     () => data.shiftSlots
       .filter(s => s.shiftMonthId === currentMonth?.id)

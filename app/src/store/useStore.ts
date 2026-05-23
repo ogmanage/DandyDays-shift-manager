@@ -376,9 +376,9 @@ export function useStore() {
     let updatedSlot: ShiftSlot | undefined
     const updatedResponses: StaffResponse[] = []
     update(prev => {
-      const slots = prev.shiftSlots.map(s => {
+      const slots: ShiftSlot[] = prev.shiftSlots.map(s => {
         if (s.id !== slotId) return s
-        updatedSlot = { ...s, status: 'published' as const }
+        updatedSlot = { ...s, status: 'draft' as const }
         return updatedSlot
       })
       const responses = prev.staffResponses.map(r => {

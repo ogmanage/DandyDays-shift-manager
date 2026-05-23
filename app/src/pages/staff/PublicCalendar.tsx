@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { format, getDaysInMonth, parseISO } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { gasGet } from '@/services/gasService'
-import { ShiftMonth, ShiftSlot, StaffResponse, Member } from '@/types'
+import { ShiftMonth, ShiftSlot, StaffResponse } from '@/types'
 import { Loader2, CalendarDays } from 'lucide-react'
 
 const DOW = ['日', '月', '火', '水', '木', '金', '土']
@@ -22,7 +22,6 @@ export function PublicCalendar() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [gasData, setGasData] = useState<GasData | null>(null)
-  const [members, setMembers] = useState<Member[]>([])
 
   useEffect(() => {
     if (!monthId || !gasUrl) { setError('URLが不正です'); setLoading(false); return }
