@@ -105,10 +105,26 @@ export function useStore() {
     // ── シート設定済み：リモートデータを先に読んで権限チェック ──
     setIsLoadingSheets(true)
     try {
-      const exists = await checkSpreadsheetExists(token, sheetId)
-      if (!exists) return 'needs_setup'
+      // 環境変数由来のIDはオーナー以外アクセス権がない場合があるため存在チェックをスキップ
+      const isEnvSheetId = !localStorage.getItem(SHEET_ID_KEY) && sheetId === DEFAULT_SHEET_ID
+      if (!isEnvSheetId) {
+        const exists = await checkSpreadsheetExists(token, sheetId)
+        if (!exists) return 'needs_setup'
+      }
 
-      const remoteData = await loadAllData(token, sheetId)
+      let remoteData
+      try {
+        remoteData = await loadAllData(token, sheetId)
+      } catch {
+        if (isEnvSheetId) {
+          throw new Error(
+            'スプレッドシートへのアクセス権がありません。\n' +
+            '管理者（オーナー）に以下のスプレッドシートを「編集者」として共有してもらってください。\n' +
+            `https://docs.google.com/spreadsheets/d/${sheetId}/edit`
+          )
+        }
+        return 'needs_setup'
+      }
 
       // 管理者権限チェック
       let member = remoteData.members.find(m => m.email === userInfo.email)
