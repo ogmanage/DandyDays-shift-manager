@@ -4,7 +4,9 @@ import { initGoogleAuth, requestAccessToken, getValidToken, fetchUserInfo, clear
 import {
   createSpreadsheet, loadAllData, appendRow,
   updateRowById, deleteRowById, checkSpreadsheetExists,
+  loadSettings, saveSetting,
 } from '@/services/sheetsService'
+import { getGasUrl, saveGasUrl } from '@/services/gasService'
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
 const DEFAULT_SHEET_ID = (import.meta.env.VITE_SPREADSHEET_ID as string) || ''
@@ -157,6 +159,14 @@ export function useStore() {
         localStorage.setItem(SHEET_ID_KEY, sheetId)
         setSpreadsheetId(sheetId)
       }
+
+      // GAS URLをスプレッドシートから取得して同期（他デバイス・他管理者との共有）
+      if (!getGasUrl()) {
+        const settings = await loadSettings(token, sheetId)
+        if (settings.gas_url) {
+          saveGasUrl(settings.gas_url)
+        }
+      }
       setData(() => {
         const merged = { ...remoteData, currentAdminId: member.id }
         saveCache(merged)
@@ -259,6 +269,18 @@ export function useStore() {
   const disconnectSheet = useCallback(() => {
     localStorage.removeItem(SHEET_ID_KEY)
     setSpreadsheetId(null)
+  }, [])
+
+  // GAS URLをスプレッドシートに保存（他の管理者と共有するため）
+  const saveGasUrlToSheet = useCallback(async (url: string) => {
+    const sheetId = localStorage.getItem(SHEET_ID_KEY)
+    if (!sheetId || !CLIENT_ID) return
+    try {
+      const token = await getValidToken()
+      await saveSetting(token, sheetId, 'gas_url', url)
+    } catch (e) {
+      console.error('GAS URL保存エラー:', e)
+    }
   }, [])
 
   const currentAdmin = data.members.find(m => m.id === data.currentAdminId) ?? null
@@ -499,7 +521,7 @@ export function useStore() {
 
   return {
     data, currentAdmin, syncStatus, spreadsheetId, isLoadingSheets,
-    loginWithGoogle, createNewSheet, connectExistingSheet, disconnectSheet, logout, refreshData, changeSheet,
+    loginWithGoogle, createNewSheet, connectExistingSheet, disconnectSheet, logout, refreshData, changeSheet, saveGasUrlToSheet,
     addMember, updateMember, updateMemberRole, deleteMember,
     createShiftMonth, publishShiftMonth, closeShiftMonth,
     addShiftSlot, updateShiftSlot, deleteShiftSlot, copyShiftSlots, confirmShiftSlot, unconfirmShiftSlot,

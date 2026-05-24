@@ -195,3 +195,47 @@ export async function checkSpreadsheetExists(token: string, spreadsheetId: strin
     return false
   }
 }
+
+// ── 設定値の読み込み（settingsシート: key | value）──
+export async function loadSettings(token: string, spreadsheetId: string): Promise<Record<string, string>> {
+  try {
+    const res = await sheetsRequest('GET', `${BASE}/${spreadsheetId}/values/settings!A1:B`, token) as { values?: string[][] }
+    const values = res.values ?? []
+    if (values.length < 2) return {}
+    const result: Record<string, string> = {}
+    values.slice(1).forEach(row => {
+      if (row[0]) result[String(row[0])] = String(row[1] ?? '')
+    })
+    return result
+  } catch {
+    return {} // settingsシートが存在しない場合は空を返す
+  }
+}
+
+// ── 設定値の保存（upsert）──────────────────────
+export async function saveSetting(token: string, spreadsheetId: string, key: string, value: string): Promise<void> {
+  try {
+    // 既存キーを検索
+    const res = await sheetsRequest('GET', `${BASE}/${spreadsheetId}/values/settings!A:A`, token) as { values?: string[][] }
+    const rows = res.values ?? []
+    const rowIndex = rows.findIndex((r, i) => i > 0 && r[0] === key)
+
+    if (rowIndex !== -1) {
+      const sheetRow = rowIndex + 1
+      await sheetsRequest('PUT', `${BASE}/${spreadsheetId}/values/settings!A${sheetRow}:B${sheetRow}?valueInputOption=RAW`, token, { values: [[key, value]] })
+    } else {
+      await sheetsRequest('POST', `${BASE}/${spreadsheetId}/values/settings!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, token, { values: [[key, value]] })
+    }
+  } catch {
+    // settingsシートが存在しない場合は作成してから保存
+    try {
+      await sheetsRequest('POST', `${BASE}/${spreadsheetId}:batchUpdate`, token, {
+        requests: [{ addSheet: { properties: { title: 'settings' } } }]
+      })
+      await sheetsRequest('PUT', `${BASE}/${spreadsheetId}/values/settings!A1:B1?valueInputOption=RAW`, token, { values: [['key', 'value']] })
+      await sheetsRequest('POST', `${BASE}/${spreadsheetId}/values/settings!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, token, { values: [[key, value]] })
+    } catch {
+      // 失敗しても続行（致命的でないため）
+    }
+  }
+}

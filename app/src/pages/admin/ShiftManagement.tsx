@@ -14,7 +14,8 @@ type Tab = 'slots' | 'responses' | 'confirmed' | 'calendar'
 export function ShiftManagement() {
   const { data, createShiftMonth, addShiftSlot, updateShiftSlot, deleteShiftSlot,
           publishShiftMonth, closeShiftMonth, copyShiftSlots, confirmShiftSlot, unconfirmShiftSlot,
-          getSlotResponses, deleteStaffResponse, submitResponse, refreshData, isLoadingSheets } = useStoreContext()
+          getSlotResponses, deleteStaffResponse, submitResponse, refreshData, isLoadingSheets,
+          saveGasUrlToSheet } = useStoreContext()
 
   const now = new Date()
   const [selYear, setSelYear] = useState(now.getFullYear())
@@ -84,7 +85,12 @@ export function ShiftManagement() {
   const [editCount, setEditCount] = useState(1)
   const [editNote, setEditNote] = useState('')
 
-  useEffect(() => { if (gasUrl) saveGasUrl(gasUrl) }, [gasUrl])
+  useEffect(() => {
+    if (gasUrl) {
+      saveGasUrl(gasUrl)
+      saveGasUrlToSheet(gasUrl) // スプレッドシートにも保存（他の管理者と共有）
+    }
+  }, [gasUrl, saveGasUrlToSheet])
 
   // シフト希望タブを開いたとき、未知のメンバーがいれば自動更新
   useEffect(() => {
