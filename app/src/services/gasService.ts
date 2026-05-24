@@ -1,7 +1,8 @@
 const GAS_URL_KEY = 'shift_gas_url'
+const DEFAULT_GAS_URL = (import.meta.env.VITE_GAS_URL as string) || ''
 
 export function getGasUrl(): string | null {
-  return localStorage.getItem(GAS_URL_KEY)
+  return localStorage.getItem(GAS_URL_KEY) || DEFAULT_GAS_URL || null
 }
 
 export function saveGasUrl(url: string): void {
