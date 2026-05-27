@@ -6,10 +6,12 @@ import {
   updateRowById, deleteRowById, checkSpreadsheetExists,
   loadSettings, saveSetting,
 } from '@/services/sheetsService'
-import { getGasUrl, saveGasUrl } from '@/services/gasService'
+import { saveGasUrl } from '@/services/gasService'
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
 const DEFAULT_SHEET_ID = (import.meta.env.VITE_SPREADSHEET_ID as string) || ''
+const DEFAULT_GAS_URL = (import.meta.env.VITE_GAS_URL as string) || ''
+const GAS_URL_STORAGE_KEY = 'shift_gas_url'
 const SHEET_ID_KEY = 'shift_spreadsheet_id'
 const LOCAL_CACHE_KEY = 'shift_manager_cache'
 const ADMIN_SESSION_KEY = 'shift_current_admin_id'
@@ -160,12 +162,14 @@ export function useStore() {
         setSpreadsheetId(sheetId)
       }
 
-      // GAS URLをスプレッドシートから取得して同期（他デバイス・他管理者との共有）
-      if (!getGasUrl()) {
-        const settings = await loadSettings(token, sheetId)
-        if (settings.gas_url) {
-          saveGasUrl(settings.gas_url)
-        }
+      // VITE_GAS_URLがあればlocalStorageに保存（新規管理者でも即利用可能）
+      if (DEFAULT_GAS_URL && !localStorage.getItem(GAS_URL_STORAGE_KEY)) {
+        saveGasUrl(DEFAULT_GAS_URL)
+      }
+      // スプレッドシートのsettingsからGAS URLを同期（上書き優先）
+      const settings = await loadSettings(token, sheetId)
+      if (settings.gas_url) {
+        saveGasUrl(settings.gas_url)
       }
       setData(() => {
         const merged = { ...remoteData, currentAdminId: member.id }
