@@ -3,7 +3,7 @@ import { format, getDaysInMonth, parseISO } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { Plus, Trash2, Copy, Share2, Lock, ChevronDown, ChevronUp, UserCheck, CheckCircle2, AlertCircle, Pencil, X, RefreshCw, MessageSquare, RotateCcw, CalendarDays } from 'lucide-react'
 import { useStoreContext } from '@/store/StoreContext'
-import { getGasUrl, saveGasUrl } from '@/services/gasService'
+import { getGasUrl } from '@/services/gasService'
 import { Modal } from '@/components/Modal'
 import { Badge } from '@/components/Badge'
 import { ShiftSlot } from '@/types'
@@ -14,8 +14,7 @@ type Tab = 'slots' | 'responses' | 'confirmed' | 'calendar'
 export function ShiftManagement() {
   const { data, createShiftMonth, addShiftSlot, updateShiftSlot, deleteShiftSlot,
           publishShiftMonth, closeShiftMonth, copyShiftSlots, confirmShiftSlot, unconfirmShiftSlot,
-          getSlotResponses, deleteStaffResponse, submitResponse, refreshData, isLoadingSheets,
-          saveGasUrlToSheet } = useStoreContext()
+          getSlotResponses, deleteStaffResponse, submitResponse, refreshData, isLoadingSheets } = useStoreContext()
 
   const now = new Date()
   const [selYear, setSelYear] = useState(now.getFullYear())
@@ -37,8 +36,7 @@ export function ShiftManagement() {
   const [copyFrom, setCopyFrom] = useState('')
   const [copyMode, setCopyMode] = useState<'date' | 'weekday'>('date')
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
-  const [gasUrl, setGasUrlState] = useState(() => getGasUrl() ?? '')
-  const [showGasInput, setShowGasInput] = useState(false)
+  const gasUrl = getGasUrl() ?? ''
 
   // カレンダー詳細ポップアップ（④）
   const [calendarPopupSlot, setCalendarPopupSlot] = useState<ShiftSlot | null>(null)
@@ -84,13 +82,6 @@ export function ShiftManagement() {
   const [editLocation, setEditLocation] = useState('')
   const [editCount, setEditCount] = useState(1)
   const [editNote, setEditNote] = useState('')
-
-  useEffect(() => {
-    if (gasUrl) {
-      saveGasUrl(gasUrl)
-      saveGasUrlToSheet(gasUrl) // スプレッドシートにも保存（他の管理者と共有）
-    }
-  }, [gasUrl, saveGasUrlToSheet])
 
   // シフト希望タブを開いたとき、未知のメンバーがいれば自動更新
   useEffect(() => {
@@ -140,7 +131,7 @@ export function ShiftManagement() {
     })
   }, [selYear, selMonth])
 
-  const shareUrl = currentMonth?.status === 'published' ? (() => {
+  const shareUrl = currentMonth ? (() => {
     const LIFF_ID = import.meta.env.VITE_LIFF_ID as string | undefined
     const route = `#/s/${currentMonth.id}${gasUrl ? `?gas=${encodeURIComponent(gasUrl)}` : ''}`
     return LIFF_ID
@@ -319,11 +310,6 @@ export function ShiftManagement() {
       {shareUrl && (
         <div className="bg-dandy-500 rounded-xl p-4 space-y-3">
           <p className="text-sm font-bold text-white">📎 バイト向け回答URL</p>
-          {!gasUrl && (
-            <div className="bg-white/20 rounded-lg p-2 text-xs text-white">
-              ⚠️ GAS URLが未設定です。下のボタンからGAS URLを設定するとバイトが回答できます。
-            </div>
-          )}
           <div className="flex gap-2">
             <input readOnly value={shareUrl}
               className="flex-1 text-xs border-0 rounded-lg px-3 py-2 bg-white text-gray-700 font-mono" />
@@ -333,24 +319,6 @@ export function ShiftManagement() {
             </button>
           </div>
           <p className="text-xs text-white/90">↑ このURLをコピーしてLINEでバイトに共有してください</p>
-          <button onClick={() => setShowGasInput(v => !v)}
-            className="text-xs text-white/80 underline hover:text-white">
-            {gasUrl ? '✓ GAS URL設定済み（変更する）' : 'GAS URLを設定する'}
-          </button>
-          {showGasInput && (
-            <div className="space-y-1">
-              <p className="text-xs text-gray-600">Google Apps ScriptのウェブアプリURLを入力してください</p>
-              <div className="flex gap-2">
-                <input value={gasUrl} onChange={e => setGasUrlState(e.target.value)}
-                  placeholder="https://script.google.com/macros/s/.../exec"
-                  className="flex-1 text-xs border rounded px-2 py-1" />
-                <button onClick={() => setShowGasInput(false)}
-                  className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">
-                  保存
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 

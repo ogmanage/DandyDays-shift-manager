@@ -1,7 +1,8 @@
 import { ReactNode, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { CalendarDays, Users, LayoutDashboard, LogOut, Database } from 'lucide-react'
+import { CalendarDays, Users, LayoutDashboard, LogOut, Database, Settings } from 'lucide-react'
 import { useStoreContext } from '@/store/StoreContext'
+import { getGasUrl, saveGasUrl } from '@/services/gasService'
 
 const navItems = [
   { to: '/admin/dashboard', label: 'ダッシュボード', icon: LayoutDashboard },
@@ -12,11 +13,22 @@ const navItems = [
 export function AdminLayout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { currentAdmin, logout, changeSheet, spreadsheetId, isLoadingSheets } = useStoreContext()
+  const { currentAdmin, logout, changeSheet, spreadsheetId, isLoadingSheets, saveGasUrlToSheet } = useStoreContext()
 
   const [showChangeSheet, setShowChangeSheet] = useState(false)
   const [newSheetId, setNewSheetId] = useState('')
   const [sheetError, setSheetError] = useState('')
+
+  const [showSettings, setShowSettings] = useState(false)
+  const [settingsGasUrl, setSettingsGasUrl] = useState(() => getGasUrl() ?? '')
+  const [gasSaved, setGasSaved] = useState(false)
+
+  const handleSaveGasUrl = () => {
+    saveGasUrl(settingsGasUrl)
+    saveGasUrlToSheet(settingsGasUrl)
+    setGasSaved(true)
+    setTimeout(() => setGasSaved(false), 2000)
+  }
 
   const handleLogout = () => {
     logout()
@@ -43,6 +55,12 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         <span className="font-bold text-lg tracking-wide">シフト管理</span>
         <div className="flex items-center gap-3 text-sm">
           <span className="hidden sm:block">{currentAdmin?.name}</span>
+          <button
+            onClick={() => { setSettingsGasUrl(getGasUrl() ?? ''); setShowSettings(true) }}
+            className="flex items-center gap-1 hover:text-dandy-100"
+            title="設定">
+            <Settings size={15} />
+          </button>
           <button
             onClick={() => { setShowChangeSheet(true); setNewSheetId(spreadsheetId ?? '') }}
             className="flex items-center gap-1 hover:text-dandy-100"
@@ -99,6 +117,41 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         </div>
       )}
 
+
+      {/* 設定モーダル */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <h2 className="font-bold text-gray-800 flex items-center gap-2">
+              <Settings size={18} className="text-dandy-500" />
+              設定
+            </h2>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">GAS URL</label>
+              <p className="text-xs text-gray-400 mb-2">Google Apps ScriptのウェブアプリURL（バイト回答機能に必要）</p>
+              <input
+                type="text"
+                value={settingsGasUrl}
+                onChange={e => setSettingsGasUrl(e.target.value)}
+                placeholder="https://script.google.com/macros/s/.../exec"
+                className="w-full border rounded-lg px-3 py-2 text-xs font-mono"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowSettings(false); setGasSaved(false) }}
+                className="flex-1 border py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+                閉じる
+              </button>
+              <button
+                onClick={handleSaveGasUrl}
+                className="flex-1 bg-dandy-500 text-white py-2 rounded-lg text-sm hover:bg-dandy-600">
+                {gasSaved ? '✓ 保存しました' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-1">
         {/* サイドバー（デスクトップ） */}
