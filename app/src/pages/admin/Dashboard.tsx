@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
-import { CalendarDays, Users, AlertCircle, CheckCircle2, Clock, Database } from 'lucide-react'
+import { CalendarDays, Users, AlertCircle, CheckCircle2, Clock, Database, UserPlus, Link } from 'lucide-react'
 import { useStoreContext } from '@/store/StoreContext'
 import { Badge } from '@/components/Badge'
 
@@ -18,6 +18,14 @@ export function Dashboard() {
   const [showSheetChange, setShowSheetChange] = useState(false)
   const [newSheetId, setNewSheetId] = useState('')
   const [sheetError, setSheetError] = useState('')
+  const [adminLinkCopied, setAdminLinkCopied] = useState(false)
+
+  const adminLoginUrl = `${window.location.origin}${window.location.pathname}#/admin/login`
+  const handleCopyAdminLink = () => {
+    navigator.clipboard.writeText(adminLoginUrl)
+    setAdminLinkCopied(true)
+    setTimeout(() => setAdminLinkCopied(false), 2000)
+  }
 
   const now = new Date()
   const thisYear = now.getFullYear()
@@ -116,6 +124,30 @@ export function Dashboard() {
         <StatCard icon={<Users size={20} className="text-dandy-400" />} label="管理者" value={`${totalAdmins}名`} />
         <StatCard icon={<CheckCircle2 size={20} className="text-green-500" />} label="今月確定枠" value={`${confirmedCount}枠`} />
         <StatCard icon={<AlertCircle size={20} className="text-red-500" />} label="今月未確定" value={`${undecidedCount}枠`} color={undecidedCount > 0 ? 'red' : undefined} />
+      </div>
+
+      {/* 管理者招待リンク */}
+      <div className="bg-white rounded-xl border p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <UserPlus size={16} className="text-dandy-400" />
+            <p className="text-sm font-semibold text-gray-700">管理者を招待する</p>
+          </div>
+        </div>
+        <p className="text-xs text-gray-500">
+          新しい管理者にこのURLを共有してください。Google アカウントでログインすると管理者として登録されます。
+        </p>
+        <div className="flex gap-2">
+          <div className="flex-1 flex items-center gap-2 bg-gray-50 border rounded-lg px-3 py-2">
+            <Link size={12} className="text-gray-400 shrink-0" />
+            <span className="text-xs text-gray-600 font-mono truncate">{adminLoginUrl}</span>
+          </div>
+          <button
+            onClick={handleCopyAdminLink}
+            className="flex items-center gap-1.5 text-xs font-bold bg-dandy-500 text-white px-4 py-2 rounded-lg hover:bg-dandy-600 transition-colors shrink-0">
+            {adminLinkCopied ? '✓ コピー済み' : 'コピー'}
+          </button>
+        </div>
       </div>
 
       {/* 月別シフト一覧 */}

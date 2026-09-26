@@ -268,8 +268,9 @@ export function StaffResponse() {
   }
 
   const handleSubmit = () => {
+    if (selectedCount === 0) return
     setSubmitted(true)
-    setTimeout(() => setSubmitted(false), 3000)
+    setTimeout(() => setSubmitted(false), 4000)
   }
 
   // ─── ローディング ────────────────────────────────
@@ -501,11 +502,20 @@ export function StaffResponse() {
       {/* ボトムバー：iOS ホームバー対応 */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg"
         style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
-        <div className="w-full max-w-lg mx-auto flex items-center gap-3 px-4 pt-3 pb-1">
-          <span className="text-sm text-gray-500 shrink-0">{selectedCount}枠選択</span>
+        <div className="w-full max-w-lg mx-auto px-4 pt-2 pb-1 space-y-1">
+          <p className="text-center text-xs text-gray-400">
+            {selectedCount > 0
+              ? `✓ ${selectedCount}枠回答済み（タップのたびに自動保存されます）`
+              : 'タップして参加できる枠を選んでください'}
+          </p>
           <button onClick={handleSubmit}
-            className="flex-1 bg-dandy-500 active:bg-dandy-600 text-white font-bold py-3.5 rounded-xl text-sm transition-colors">
-            {submitted ? '✓ 回答を保存しました' : '回答を確定する'}
+            className={`w-full font-bold py-3.5 rounded-xl text-sm transition-colors
+              ${submitted
+                ? 'bg-green-500 text-white'
+                : selectedCount > 0
+                  ? 'bg-dandy-500 active:bg-dandy-600 text-white'
+                  : 'bg-gray-100 text-gray-400'}`}>
+            {submitted ? '✓ 送信完了！ありがとうございました' : `回答を完了する（${selectedCount}枠）`}
           </button>
         </div>
       </div>

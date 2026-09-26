@@ -308,17 +308,45 @@ export function ShiftManagement() {
 
       {/* 共有URL */}
       {shareUrl && (
-        <div className="bg-dandy-500 rounded-xl p-4 space-y-3">
-          <p className="text-sm font-bold text-white">📎 バイト向け回答URL</p>
-          <div className="flex gap-2">
-            <input readOnly value={shareUrl}
-              className="flex-1 text-xs border-0 rounded-lg px-3 py-2 bg-white text-gray-700 font-mono" />
-            <button onClick={() => navigator.clipboard.writeText(shareUrl)}
-              className="text-sm font-bold bg-white text-dandy-600 px-4 py-2 rounded-lg hover:bg-dandy-50 transition-colors shrink-0">
-              コピー
-            </button>
+        <div className="rounded-xl border overflow-hidden">
+          {/* 希望入力URL */}
+          <div className="bg-dandy-500 p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-white">📝 希望入力URL</span>
+              <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">バイトがシフト希望を送るURL</span>
+            </div>
+            <div className="flex gap-2">
+              <input readOnly value={shareUrl}
+                className="flex-1 text-xs border-0 rounded-lg px-3 py-2 bg-white text-gray-700 font-mono" />
+              <button onClick={() => navigator.clipboard.writeText(shareUrl)}
+                className="text-sm font-bold bg-white text-dandy-600 px-4 py-2 rounded-lg hover:bg-dandy-50 transition-colors shrink-0">
+                コピー
+              </button>
+            </div>
+            <p className="text-xs text-white/80">↑ 公開・URL発行した直後にLINEで共有してください</p>
           </div>
-          <p className="text-xs text-white/90">↑ このURLをコピーしてLINEでバイトに共有してください</p>
+          {/* 確定シフト閲覧URL */}
+          <div className={`p-4 space-y-2 ${publicCalendarUrl ? 'bg-blue-600' : 'bg-gray-100'}`}>
+            <div className="flex items-center gap-2">
+              <span className={`text-sm font-bold ${publicCalendarUrl ? 'text-white' : 'text-gray-400'}`}>📅 確定シフト閲覧URL</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${publicCalendarUrl ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-400'}`}>シフト確定後にバイトに共有</span>
+            </div>
+            {publicCalendarUrl ? (
+              <>
+                <div className="flex gap-2">
+                  <input readOnly value={publicCalendarUrl}
+                    className="flex-1 text-xs border-0 rounded-lg px-3 py-2 bg-white text-gray-700 font-mono" />
+                  <button onClick={handleCopyCalendarUrl}
+                    className="text-sm font-bold bg-white text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors shrink-0">
+                    {calendarCopied ? '✓ コピー済み' : 'コピー'}
+                  </button>
+                </div>
+                <p className="text-xs text-white/80">↑ 確定後にバイトが自分のシフトを確認できます</p>
+              </>
+            ) : (
+              <p className="text-xs text-gray-400">GAS URLを設定すると利用できます（ヘッダーの⚙から設定）</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -608,7 +636,7 @@ export function ShiftManagement() {
                   onClick={handleCopyCalendarUrl}
                   className="flex items-center gap-1.5 text-xs font-bold bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors">
                   <CalendarDays size={13} />
-                  {calendarCopied ? '✓ コピー済み' : '公開URLをコピー'}
+                  {calendarCopied ? '✓ コピー済み' : '確定シフト閲覧URLをコピー'}
                 </button>
               ) : (
                 <span className="text-xs text-gray-400">GAS URL未設定</span>
