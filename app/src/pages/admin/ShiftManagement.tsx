@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { format, getDaysInMonth, parseISO } from 'date-fns'
 import { ja } from 'date-fns/locale'
-import { Plus, Trash2, Copy, Share2, Lock, ChevronDown, ChevronUp, UserCheck, CheckCircle2, AlertCircle, Pencil, X, RefreshCw, MessageSquare, RotateCcw, CalendarDays } from 'lucide-react'
+import { Plus, Trash2, Copy, Share2, Lock, ChevronDown, ChevronUp, UserCheck, CheckCircle2, AlertCircle, Pencil, X, RefreshCw, MessageSquare, RotateCcw, CalendarDays, Store } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
 import { useStoreContext } from '@/store/StoreContext'
 import { getGasUrl } from '@/services/gasService'
 import { Modal } from '@/components/Modal'
@@ -15,10 +16,22 @@ export function ShiftManagement() {
   const { data, createShiftMonth, addShiftSlot, updateShiftSlot, deleteShiftSlot,
           publishShiftMonth, closeShiftMonth, reopenShiftMonth, copyShiftSlots, confirmShiftSlot, unconfirmShiftSlot,
           getSlotResponses, deleteStaffResponse, submitResponse, refreshData, isLoadingSheets } = useStoreContext()
+  const location = useLocation()
 
   const now = new Date()
-  const [selYear, setSelYear] = useState(now.getFullYear())
-  const [selMonth, setSelMonth] = useState(now.getMonth() + 1)
+
+  // ダッシュボードから monthId が渡された場合、その月に初期フォーカス
+  const initialMonth = useMemo(() => {
+    const state = location.state as { monthId?: string } | null
+    if (state?.monthId) {
+      const m = data.shiftMonths.find(m => m.id === state.monthId)
+      if (m) return { year: m.year, month: m.month }
+    }
+    return { year: now.getFullYear(), month: now.getMonth() + 1 }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [selYear, setSelYear] = useState(initialMonth.year)
+  const [selMonth, setSelMonth] = useState(initialMonth.month)
   const [activeTab, setActiveTab] = useState<Tab>('slots')
   const [showAddSlot, setShowAddSlot] = useState(false)
   const [showPublish, setShowPublish] = useState(false)
@@ -37,6 +50,29 @@ export function ShiftManagement() {
   const [copyMode, setCopyMode] = useState<'date' | 'weekday'>('date')
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
   const gasUrl = getGasUrl() ?? ''
+
+  // 店舗一括追加モーダル
+  const [showStore, setShowStore] = useState(false)
+  const [storeDays, setStoreDays] = useState<number[]>([]) // 0=日,1=月,...,6=土
+  const [storeCount, setStoreCount] = useState(1)
+
+  const handleAddStore = () => {
+    if (storeDays.length === 0) return
+    const month = currentMonth ?? createShiftMonth(selYear, selMonth)
+    const daysInMonth = getDaysInMonth(new Date(selYear, selMonth - 1))
+    let added = 0
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(selYear, selMonth - 1, d)
+      if (storeDays.includes(date.getDay())) {
+        const dateStr = `${selYear}-${String(selMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+        addShiftSlot({ shiftMonthId: month.id, locationName: '店舗', date: dateStr, requiredCount: storeCount, note: '11:00-18:00' })
+        added++
+      }
+    }
+    alert(`店舗シフトを${added}枠追加しました`)
+    setShowStore(false)
+    setStoreDays([])
+  }
 
   // カレンダー詳細ポップアップ（④）
   const [calendarPopupSlot, setCalendarPopupSlot] = useState<ShiftSlot | null>(null)
@@ -275,6 +311,10 @@ export function ShiftManagement() {
         <div className="flex flex-wrap gap-2">
           {(!currentMonth || currentMonth.status === 'draft') && (
             <>
+              <button onClick={() => setShowStore(true)}
+                className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white text-sm px-3 py-1.5 rounded-lg">
+                <Store size={14} /> 店舗
+              </button>
               <button onClick={() => setShowAddSlot(true)}
                 className="flex items-center gap-1 bg-dandy-500 hover:bg-dandy-600 text-white text-sm px-3 py-1.5 rounded-lg">
                 <Plus size={14} /> 枠を追加
@@ -293,6 +333,10 @@ export function ShiftManagement() {
           )}
           {currentMonth?.status === 'published' && (
             <>
+              <button onClick={() => setShowStore(true)}
+                className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white text-sm px-3 py-1.5 rounded-lg">
+                <Store size={14} /> 店舗
+              </button>
               <button onClick={() => setShowAddSlot(true)}
                 className="flex items-center gap-1 bg-dandy-500 hover:bg-dandy-600 text-white text-sm px-3 py-1.5 rounded-lg">
                 <Plus size={14} /> 枠を追加
@@ -819,6 +863,53 @@ export function ShiftManagement() {
             <button onClick={handlePublish}
               className="w-full bg-green-600 text-white py-2 rounded-lg text-sm hover:bg-green-700">
               公開してURLを発行
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {showStore && (
+        <Modal title="🏪 店舗シフトを一括追加" onClose={() => { setShowStore(false); setStoreDays([]) }}>
+          <div className="space-y-4">
+            <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              <p className="text-xs text-amber-800 font-medium">店舗 ・ 11:00-18:00（固定）</p>
+              <p className="text-xs text-amber-600 mt-0.5">選んだ曜日の {selYear}年{selMonth}月 すべての日に追加します</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">追加する曜日を選択</label>
+              <div className="grid grid-cols-7 gap-1">
+                {DOW.map((label, dow) => (
+                  <button
+                    key={dow}
+                    type="button"
+                    onClick={() => setStoreDays(prev =>
+                      prev.includes(dow) ? prev.filter(d => d !== dow) : [...prev, dow]
+                    )}
+                    className={`py-2 rounded-lg text-sm font-bold transition-colors
+                      ${storeDays.includes(dow)
+                        ? dow === 0 ? 'bg-red-500 text-white' : dow === 6 ? 'bg-dandy-500 text-white' : 'bg-amber-500 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {storeDays.length > 0 && (
+                <p className="text-xs text-amber-700 mt-2 bg-amber-50 rounded px-2 py-1">
+                  選択中: {storeDays.sort().map(d => DOW[d]).join('・')}曜日
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">必要人数</label>
+              <input type="number" min={1} max={10} value={storeCount}
+                onChange={e => setStoreCount(Number(e.target.value))}
+                className="w-full border rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <button
+              onClick={handleAddStore}
+              disabled={storeDays.length === 0}
+              className="w-full bg-amber-500 hover:bg-amber-600 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed">
+              {storeDays.length === 0 ? '曜日を選択してください' : `${selMonth}月の${storeDays.sort().map(d => DOW[d]).join('・')}曜日に追加`}
             </button>
           </div>
         </Modal>
