@@ -97,6 +97,9 @@ export function ShiftManagement() {
   // 休み一括入力モード
   const [staffOffBulkMode, setStaffOffBulkMode] = useState(false)
   const [staffOffBulkDates, setStaffOffBulkDates] = useState<Set<string>>(new Set())
+  // 出勤一括入力モード（date → slotId）
+  const [staffWorkBulkMode, setStaffWorkBulkMode] = useState(false)
+  const [staffWorkBulkSelections, setStaffWorkBulkSelections] = useState<Map<string, string>>(new Map())
 
   // LINE共有テキスト
   const [lineCopied, setLineCopied] = useState(false)
@@ -947,6 +950,20 @@ export function ShiftManagement() {
           setStaffOffBulkDates(new Set())
         }
 
+        const handleBulkWork = () => {
+          if (!staffScheduleMemberId || staffWorkBulkSelections.size === 0) return
+          staffWorkBulkSelections.forEach((slotId, _date) => {
+            assignStaffToSlot(slotId, staffScheduleMemberId, true)
+          })
+          setStaffWorkBulkMode(false)
+          setStaffWorkBulkSelections(new Map())
+        }
+
+        // 出勤一括モード用: 日付ごとの枠リスト（枠がある日のみ）
+        const datesWithSlots = Array.from(slotsByDate.entries())
+          .filter(([_d, daySlots]) => daySlots.length > 0)
+          .sort(([a], [b]) => a.localeCompare(b))
+
         return (
           <div className="space-y-4">
             {staffMembers.length === 0 ? (
@@ -962,7 +979,7 @@ export function ShiftManagement() {
                     <div className="flex gap-2 flex-wrap">
                       {staffMembers.map(m => (
                         <button key={m.id}
-                          onClick={() => { setStaffScheduleMemberId(m.id); setStaffOffBulkMode(false); setStaffOffBulkDates(new Set()) }}
+                          onClick={() => { setStaffScheduleMemberId(m.id); setStaffOffBulkMode(false); setStaffOffBulkDates(new Set()); setStaffWorkBulkMode(false); setStaffWorkBulkSelections(new Map()) }}
                           className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors
                             ${staffScheduleMemberId === m.id
                               ? 'bg-dandy-500 text-white border-dandy-500'
@@ -973,16 +990,30 @@ export function ShiftManagement() {
                     </div>
                   </div>
                   {selectedMember && (
-                    <div className="flex gap-2 pt-1 border-t">
+                    <div className="flex gap-2 flex-wrap pt-1 border-t">
+                      {/* 出勤一括入力 */}
                       <button
-                        onClick={() => { setStaffOffBulkMode(v => !v); setStaffOffBulkDates(new Set()) }}
+                        onClick={() => { setStaffWorkBulkMode(v => !v); setStaffWorkBulkSelections(new Map()); setStaffOffBulkMode(false) }}
+                        className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors
+                          ${staffWorkBulkMode ? 'bg-dandy-500 text-white border-dandy-500' : 'bg-white text-dandy-600 border-dandy-300 hover:bg-dandy-50'}`}>
+                        {staffWorkBulkMode ? '✕ キャンセル' : '出勤を一括入力'}
+                      </button>
+                      {staffWorkBulkMode && staffWorkBulkSelections.size > 0 && (
+                        <button onClick={handleBulkWork}
+                          className="text-sm px-3 py-1.5 rounded-lg bg-dandy-500 text-white hover:bg-dandy-600">
+                          {staffWorkBulkSelections.size}日を出勤として登録
+                        </button>
+                      )}
+                      {/* 休み一括入力 */}
+                      <button
+                        onClick={() => { setStaffOffBulkMode(v => !v); setStaffOffBulkDates(new Set()); setStaffWorkBulkMode(false) }}
                         className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors
                           ${staffOffBulkMode ? 'bg-orange-400 text-white border-orange-400' : 'bg-white text-orange-600 border-orange-300 hover:bg-orange-50'}`}>
                         {staffOffBulkMode ? '✕ キャンセル' : '休みを一括入力'}
                       </button>
                       {staffOffBulkMode && staffOffBulkDates.size > 0 && (
                         <button onClick={handleBulkOff}
-                          className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-orange-500 text-white hover:bg-orange-600">
+                          className="text-sm px-3 py-1.5 rounded-lg bg-orange-500 text-white hover:bg-orange-600">
                           {staffOffBulkDates.size}日を休みに登録
                         </button>
                       )}
@@ -997,6 +1028,63 @@ export function ShiftManagement() {
                         休みにしたい日付をタップで選択してください（複数選択可）。バイト側には表示されません。
                       </div>
                     )}
+
+                    {/* ── 出勤一括入力パネル ── */}
+                    {staffWorkBulkMode && (
+                      <div className="bg-white rounded-xl border overflow-hidden">
+                        <div className="bg-dandy-50 px-4 py-2 border-b border-dandy-100">
+                          <p className="text-sm font-semibold text-dandy-700">出勤を一括入力 — {selectedMember.name}</p>
+                          <p className="text-xs text-dandy-500 mt-0.5">各日の枠を選択してください。選択した枠に出勤が登録されます。</p>
+                        </div>
+                        {datesWithSlots.length === 0 ? (
+                          <p className="text-sm text-gray-400 text-center py-6">この月に登録されたシフト枠がありません</p>
+                        ) : (
+                          <div className="divide-y">
+                            {datesWithSlots.map(([date, daySlots]) => {
+                              const d = parseISO(date)
+                              const selected = staffWorkBulkSelections.get(date)
+                              return (
+                                <div key={date} className="flex items-center gap-3 px-4 py-3">
+                                  <span className="text-sm font-medium text-gray-700 w-16 shrink-0">
+                                    {format(d, 'M/d', { locale: ja })}
+                                    <span className={`ml-1 text-xs ${d.getDay() === 0 ? 'text-red-500' : d.getDay() === 6 ? 'text-dandy-400' : 'text-gray-400'}`}>
+                                      ({DOW[d.getDay()]})
+                                    </span>
+                                  </span>
+                                  <div className="flex gap-1.5 flex-wrap flex-1">
+                                    {daySlots.map(s => {
+                                      const isSelected = selected === s.id
+                                      const isAlreadyAssigned = assignedRegularSlotIds.has(s.id)
+                                      return (
+                                        <button key={s.id}
+                                          onClick={() => {
+                                            setStaffWorkBulkSelections(prev => {
+                                              const next = new Map(prev)
+                                              if (isSelected) next.delete(date)
+                                              else next.set(date, s.id)
+                                              return next
+                                            })
+                                          }}
+                                          className={`text-sm px-3 py-1 rounded-lg border transition-colors
+                                            ${isSelected
+                                              ? 'bg-dandy-500 text-white border-dandy-500'
+                                              : isAlreadyAssigned
+                                                ? 'bg-dandy-100 text-dandy-600 border-dandy-200'
+                                                : 'bg-white text-gray-600 border-gray-300 hover:bg-dandy-50 hover:border-dandy-300'}`}>
+                                          {isAlreadyAssigned && !isSelected ? '✓ ' : ''}{s.locationName}
+                                          {(s.startTime || s.endTime) ? ` ${s.startTime ?? '?'}〜${s.endTime ?? '?'}` : ''}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="bg-white rounded-xl border overflow-hidden">
                       <div className="bg-gray-50 px-4 py-2 border-b flex items-center justify-between">
                         <span className="text-sm font-semibold text-gray-700">
