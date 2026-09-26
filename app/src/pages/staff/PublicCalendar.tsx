@@ -54,7 +54,8 @@ export function PublicCalendar() {
   )
 
   const { shiftMonth, slots, responses = [], members = [] } = gasData
-  const confirmedSlots = slots.filter(s => s.status === 'confirmed')
+  // isPrivate=true（社員の休みなど）はバイト側に非表示
+  const confirmedSlots = slots.filter(s => s.status === 'confirmed' && !s.isPrivate)
 
   const firstDow = new Date(shiftMonth.year, shiftMonth.month - 1, 1).getDay()
   const days = getDaysInMonth(new Date(shiftMonth.year, shiftMonth.month - 1))

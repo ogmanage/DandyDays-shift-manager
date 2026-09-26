@@ -1,4 +1,4 @@
-export type Role = 'user' | 'admin'
+export type Role = 'user' | 'staff' | 'admin'
 export type ShiftMonthStatus = 'draft' | 'published' | 'closed'
 export type ShiftSlotStatus = 'draft' | 'confirmed' | 'undecided'
 
@@ -31,6 +31,8 @@ export interface ShiftSlot {
   requiredCount: number
   status: ShiftSlotStatus
   note: string
+  isPrivate?: boolean       // true = バイト側に非表示（社員の休みなど）
+  isStaffSchedule?: boolean // true = 社員シフト（通常シフト枠と区別）
 }
 
 export interface StaffResponse {

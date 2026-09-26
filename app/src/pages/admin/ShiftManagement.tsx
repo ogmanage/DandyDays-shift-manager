@@ -10,11 +10,12 @@ import { Badge } from '@/components/Badge'
 import { ShiftSlot } from '@/types'
 
 const DOW = ['日', '月', '火', '水', '木', '金', '土']
-type Tab = 'slots' | 'responses' | 'confirmed' | 'calendar'
+type Tab = 'slots' | 'responses' | 'confirmed' | 'calendar' | 'staff_schedule'
 
 export function ShiftManagement() {
   const { data, createShiftMonth, addShiftSlot, updateShiftSlot, deleteShiftSlot,
           publishShiftMonth, closeShiftMonth, reopenShiftMonth, copyShiftSlots, confirmShiftSlot, unconfirmShiftSlot,
+          addStaffScheduleEntry, deleteStaffScheduleEntry,
           getSlotResponses, deleteStaffResponse, submitResponse, refreshData, isLoadingSheets } = useStoreContext()
   const location = useLocation()
 
@@ -86,6 +87,12 @@ export function ShiftManagement() {
   const [manualAddMemberId, setManualAddMemberId] = useState('')
 
 
+  // 社員シフト一括入力
+  const [staffScheduleMemberId, setStaffScheduleMemberId] = useState('')
+  const [staffScheduleModal, setStaffScheduleModal] = useState<{ date: string } | null>(null)
+  const [staffScheduleType, setStaffScheduleType] = useState<'work' | 'off'>('work')
+  const [staffScheduleLocation, setStaffScheduleLocation] = useState('')
+
   // LINE共有テキスト
   const [lineCopied, setLineCopied] = useState(false)
   const [calendarCopied, setCalendarCopied] = useState(false)
@@ -149,7 +156,14 @@ export function ShiftManagement() {
 
   const slots = useMemo(
     () => data.shiftSlots
-      .filter(s => s.shiftMonthId === currentMonth?.id)
+      .filter(s => s.shiftMonthId === currentMonth?.id && !s.isStaffSchedule)
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    [data.shiftSlots, currentMonth?.id]
+  )
+
+  const staffScheduleSlots = useMemo(
+    () => data.shiftSlots
+      .filter(s => s.shiftMonthId === currentMonth?.id && s.isStaffSchedule)
       .sort((a, b) => a.date.localeCompare(b.date)),
     [data.shiftSlots, currentMonth?.id]
   )
@@ -426,10 +440,11 @@ export function ShiftManagement() {
       {/* タブ */}
       <div className="flex border-b overflow-x-auto">
         {([
-          { key: 'slots',     label: `シフト枠 (${slots.length})` },
-          { key: 'responses', label: `シフト希望 (${pendingSlots.length})` },
-          { key: 'confirmed', label: `確定シフト (${confirmedSlots.length})` },
-          { key: 'calendar',  label: 'カレンダー' },
+          { key: 'slots',          label: `シフト枠 (${slots.length})` },
+          { key: 'responses',      label: `シフト希望 (${pendingSlots.length})` },
+          { key: 'confirmed',      label: `確定シフト (${confirmedSlots.length})` },
+          { key: 'calendar',       label: 'カレンダー' },
+          { key: 'staff_schedule', label: '社員シフト' },
         ] as { key: Tab; label: string }[]).map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap
@@ -848,6 +863,228 @@ export function ShiftManagement() {
           </div>
         </div>
       )}
+
+      {/* ── タブ5: 社員シフト一括入力 ── */}
+      {activeTab === 'staff_schedule' && (() => {
+        const staffMembers = data.members.filter(m => m.role === 'staff')
+        const selectedMember = staffMembers.find(m => m.id === staffScheduleMemberId)
+
+        // 選択メンバーの社員シフトエントリ（date → slot）
+        const memberEntries = new Map<string, typeof staffScheduleSlots[0]>()
+        staffScheduleSlots.forEach(s => {
+          const hasAssigned = data.staffResponses.some(
+            r => r.shiftSlotId === s.id && r.memberId === staffScheduleMemberId && r.isAssigned
+          )
+          if (hasAssigned) memberEntries.set(s.date, s)
+        })
+
+        const firstDow = currentMonth ? new Date(selYear, selMonth - 1, 1).getDay() : 0
+        const days = currentMonth ? getDaysInMonth(new Date(selYear, selMonth - 1)) : 0
+        const total = Math.ceil((firstDow + days) / 7) * 7
+        const cells = Array.from({ length: total }, (_, i) => {
+          const d = i - firstDow + 1
+          return d >= 1 && d <= days ? d : null
+        })
+
+        const openModal = (dateStr: string) => {
+          const existing = memberEntries.get(dateStr)
+          setStaffScheduleType(existing ? (existing.locationName === '休み' ? 'off' : 'work') : 'work')
+          setStaffScheduleLocation(existing && existing.locationName !== '休み' ? existing.locationName : '')
+          setStaffScheduleModal({ date: dateStr })
+        }
+
+        const saveEntry = () => {
+          if (!staffScheduleModal || !currentMonth || !staffScheduleMemberId) return
+          if (staffScheduleType === 'work' && !staffScheduleLocation.trim()) return
+          addStaffScheduleEntry(
+            currentMonth.id,
+            staffScheduleMemberId,
+            staffScheduleModal.date,
+            staffScheduleType,
+            staffScheduleLocation.trim()
+          )
+          setStaffScheduleModal(null)
+        }
+
+        const deleteEntry = (slotId: string) => {
+          deleteStaffScheduleEntry(slotId)
+          setStaffScheduleModal(null)
+        }
+
+        return (
+          <div className="space-y-4">
+            {staffMembers.length === 0 ? (
+              <div className="bg-white rounded-xl border p-8 text-center text-gray-400 text-sm">
+                社員が登録されていません。スタッフ管理から「社員」ロールのメンバーを追加してください。
+              </div>
+            ) : (
+              <>
+                {/* メンバー選択 */}
+                <div className="bg-white rounded-xl border p-4">
+                  <label className="text-sm font-medium text-gray-700 block mb-2">社員を選択</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {staffMembers.map(m => (
+                      <button key={m.id}
+                        onClick={() => setStaffScheduleMemberId(m.id)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors
+                          ${staffScheduleMemberId === m.id
+                            ? 'bg-dandy-500 text-white border-dandy-500'
+                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
+                        {m.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {selectedMember && currentMonth && (
+                  <>
+                    <div className="bg-white rounded-xl border overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-2 border-b flex items-center justify-between">
+                        <span className="text-sm font-semibold text-gray-700">
+                          {selectedMember.name} の {selYear}年{selMonth}月シフト
+                        </span>
+                        <div className="flex items-center gap-3 text-xs text-gray-500">
+                          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-dandy-400 inline-block" />出勤</span>
+                          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-orange-300 inline-block" />休み</span>
+                        </div>
+                      </div>
+                      <div className="p-3">
+                        <div className="grid grid-cols-7 mb-1">
+                          {DOW.map((d, i) => (
+                            <div key={d} className={`text-center text-xs font-medium py-1
+                              ${i === 0 ? 'text-red-500' : i === 6 ? 'text-dandy-400' : 'text-gray-500'}`}>{d}</div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded overflow-hidden">
+                          {cells.map((dayNum, i) => {
+                            if (!dayNum) return <div key={i} className="bg-gray-50 min-h-16" />
+                            const dateStr = `${selYear}-${String(selMonth).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`
+                            const entry = memberEntries.get(dateStr)
+                            const dow = i % 7
+                            return (
+                              <button key={i} onClick={() => openModal(dateStr)}
+                                className={`p-1 min-h-16 text-left hover:opacity-80 transition-opacity
+                                  ${entry ? (entry.locationName === '休み' ? 'bg-orange-50' : 'bg-dandy-50') : 'bg-white'}`}>
+                                <p className={`text-xs font-medium mb-0.5 w-5 h-5 flex items-center justify-center rounded-full
+                                  ${dow === 0 ? 'text-red-500' : dow === 6 ? 'text-dandy-400' : 'text-gray-700'}`}>
+                                  {dayNum}
+                                </p>
+                                {entry && (
+                                  <span className={`text-xs rounded px-1 py-0.5 truncate block leading-tight
+                                    ${entry.locationName === '休み'
+                                      ? 'bg-orange-200 text-orange-700'
+                                      : 'bg-dandy-200 text-dandy-800'}`}>
+                                    {entry.locationName}
+                                  </span>
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 一覧サマリー */}
+                    {memberEntries.size > 0 && (
+                      <div className="bg-white rounded-xl border divide-y overflow-hidden">
+                        <div className="bg-gray-50 px-4 py-2 text-xs font-medium text-gray-600">登録済みスケジュール</div>
+                        {Array.from(memberEntries.entries())
+                          .sort(([a], [b]) => a.localeCompare(b))
+                          .map(([date, slot]) => {
+                            const d = parseISO(date)
+                            return (
+                              <div key={date} className="flex items-center gap-3 px-4 py-2.5">
+                                <span className="text-sm text-gray-700 w-16 shrink-0">
+                                  {format(d, 'M/d', { locale: ja })}
+                                  <span className={`ml-1 ${d.getDay() === 0 ? 'text-red-500' : d.getDay() === 6 ? 'text-dandy-400' : 'text-gray-400'}`}>
+                                    ({DOW[d.getDay()]})
+                                  </span>
+                                </span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium
+                                  ${slot.locationName === '休み' ? 'bg-orange-100 text-orange-700' : 'bg-dandy-100 text-dandy-700'}`}>
+                                  {slot.locationName}
+                                </span>
+                                {slot.isPrivate && <span className="text-xs text-gray-400">（バイト非表示）</span>}
+                                <button onClick={() => deleteEntry(slot.id)}
+                                  className="ml-auto text-gray-300 hover:text-red-500 p-0.5">
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            )
+                          })}
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+
+            {/* 日付クリックモーダル */}
+            {staffScheduleModal && selectedMember && (
+              <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-4"
+                onClick={() => setStaffScheduleModal(null)}>
+                <div className="bg-white rounded-2xl w-full max-w-sm p-5 space-y-4"
+                  onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-gray-800">
+                      {format(parseISO(staffScheduleModal.date), 'M月d日(E)', { locale: ja })} — {selectedMember.name}
+                    </p>
+                    <button onClick={() => setStaffScheduleModal(null)} className="text-gray-400 hover:text-gray-600">
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button onClick={() => setStaffScheduleType('work')}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors
+                        ${staffScheduleType === 'work' ? 'bg-dandy-500 text-white border-dandy-500' : 'bg-white text-gray-600 border-gray-300'}`}>
+                      出勤
+                    </button>
+                    <button onClick={() => setStaffScheduleType('off')}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors
+                        ${staffScheduleType === 'off' ? 'bg-orange-400 text-white border-orange-400' : 'bg-white text-gray-600 border-gray-300'}`}>
+                      休み
+                    </button>
+                  </div>
+
+                  {staffScheduleType === 'work' && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">勤務場所</label>
+                      <input
+                        type="text"
+                        value={staffScheduleLocation}
+                        onChange={e => setStaffScheduleLocation(e.target.value)}
+                        placeholder="例: 店舗 / 横浜スタジアム"
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                        autoFocus
+                      />
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-400">
+                    {staffScheduleType === 'off' ? '※ 休みはバイト側には表示されません' : '※ バイト側カレンダーに出勤場所が表示されます'}
+                  </p>
+
+                  <div className="flex gap-2">
+                    {memberEntries.get(staffScheduleModal.date) && (
+                      <button
+                        onClick={() => deleteEntry(memberEntries.get(staffScheduleModal!.date)!.id)}
+                        className="px-4 py-2 text-sm border border-red-200 text-red-500 rounded-lg hover:bg-red-50">
+                        削除
+                      </button>
+                    )}
+                    <button onClick={saveEntry}
+                      disabled={staffScheduleType === 'work' && !staffScheduleLocation.trim()}
+                      className="flex-1 bg-dandy-500 text-white py-2 rounded-lg text-sm hover:bg-dandy-600 disabled:opacity-40">
+                      登録する
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* ── モーダル群 ── */}
 

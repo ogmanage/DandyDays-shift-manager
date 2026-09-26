@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
-import { UserPlus, Trash2, ShieldCheck, ShieldOff, Pencil, Loader2 } from 'lucide-react'
+import { UserPlus, Trash2, Pencil, Loader2 } from 'lucide-react'
 import { useStoreContext } from '@/store/StoreContext'
 import { Modal } from '@/components/Modal'
 import { Badge } from '@/components/Badge'
-import { Member } from '@/types'
+import { Member, Role } from '@/types'
 
 export function StaffManagement() {
   const { data, currentAdmin, addMember, updateMember, updateMemberRole, deleteMember } = useStoreContext()
@@ -14,8 +14,9 @@ export function StaffManagement() {
   const [email, setEmail] = useState('')
   const [city, setCity] = useState('')
   const [error, setError] = useState('')
-  const [filter, setFilter] = useState<'all' | 'admin' | 'user'>('all')
+  const [filter, setFilter] = useState<'all' | 'admin' | 'staff' | 'user'>('all')
   const [roleChangingId, setRoleChangingId] = useState<string | null>(null)
+  const [addRole, setAddRole] = useState<Role>('user')
 
   // 編集モーダル用
   const [editingMember, setEditingMember] = useState<Member | null>(null)
@@ -26,18 +27,21 @@ export function StaffManagement() {
 
   const filtered = data.members.filter(m => filter === 'all' || m.role === filter)
 
+  const ROLE_LABEL: Record<Role, string> = { admin: '管理者', staff: '社員', user: 'バイト' }
+  const ROLE_NEXT: Record<Role, Role> = { admin: 'staff', staff: 'user', user: 'admin' }
+
   const handleAdd = () => {
     if (!name.trim() || !email.trim()) { setError('名前とメールは必須です'); return }
     if (data.members.find(m => m.email === email.trim())) { setError('このメールは既に登録されています'); return }
-    addMember({ name: name.trim(), email: email.trim(), city: city.trim() })
-    setName(''); setEmail(''); setCity(''); setError(''); setShowAdd(false)
+    addMember({ name: name.trim(), email: email.trim(), city: city.trim(), role: addRole })
+    setName(''); setEmail(''); setCity(''); setError(''); setAddRole('user'); setShowAdd(false)
   }
 
-  const handleRoleToggle = async (memberId: string, currentRole: 'user' | 'admin', memberName: string) => {
+  const handleRoleChange = async (memberId: string, currentRole: Role, memberName: string) => {
     if (!currentAdmin) return
-    const newRole = currentRole === 'admin' ? 'user' : 'admin'
-    const label = newRole === 'admin' ? '管理者に昇格' : '管理者を降格'
-    if (!confirm(`${memberName} を${label}しますか？\n（スプレッドシートに即時反映されます）`)) return
+    const newRole = ROLE_NEXT[currentRole]
+    const label = ROLE_LABEL[newRole]
+    if (!confirm(`${memberName} を「${label}」に変更しますか？\n（スプレッドシートに即時反映されます）`)) return
     setRoleChangingId(memberId)
     try {
       await updateMemberRole(memberId, newRole, currentAdmin.id)
@@ -92,15 +96,18 @@ export function StaffManagement() {
       </div>
 
       {/* フィルター */}
-      <div className="flex gap-2">
-        {(['all', 'admin', 'user'] as const).map(f => (
+      <div className="flex gap-2 flex-wrap">
+        {(['all', 'admin', 'staff', 'user'] as const).map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
             className={`px-3 py-1 text-sm rounded-full border transition-colors
               ${filter === f ? 'bg-dandy-500 text-white border-dandy-500' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
           >
-            {f === 'all' ? `全員 (${data.members.length})` : f === 'admin' ? `管理者 (${data.members.filter(m=>m.role==='admin').length})` : `バイト (${data.members.filter(m=>m.role==='user').length})`}
+            {f === 'all' ? `全員 (${data.members.length})`
+              : f === 'admin' ? `管理者 (${data.members.filter(m=>m.role==='admin').length})`
+              : f === 'staff' ? `社員 (${data.members.filter(m=>m.role==='staff').length})`
+              : `バイト (${data.members.filter(m=>m.role==='user').length})`}
           </button>
         ))}
       </div>
@@ -120,7 +127,9 @@ export function StaffManagement() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm truncate">{member.name}</span>
-                  <Badge label={member.role === 'admin' ? '管理者' : 'バイト'} variant={member.role === 'admin' ? 'blue' : 'gray'} />
+                  <Badge
+                    label={member.role === 'admin' ? '管理者' : member.role === 'staff' ? '社員' : 'バイト'}
+                    variant={member.role === 'admin' ? 'blue' : member.role === 'staff' ? 'green' : 'gray'} />
                 </div>
                 <p className="text-xs text-gray-400 truncate">{member.email}</p>
                 {member.city && <p className="text-xs text-gray-400">{member.city}</p>}
@@ -139,14 +148,14 @@ export function StaffManagement() {
                 </button>
                 {member.id !== currentAdmin?.id && (
                   <button
-                    onClick={() => handleRoleToggle(member.id, member.role, member.name)}
+                    onClick={() => handleRoleChange(member.id, member.role, member.name)}
                     disabled={roleChangingId === member.id}
-                    title={member.role === 'admin' ? '管理者を降格' : '管理者に昇格'}
-                    className="text-gray-400 hover:text-dandy-400 p-1 disabled:opacity-50"
+                    title={`→ ${ROLE_LABEL[ROLE_NEXT[member.role]]} に変更`}
+                    className="text-xs text-gray-400 hover:text-dandy-500 border rounded px-1.5 py-0.5 hover:border-dandy-400 disabled:opacity-50 transition-colors"
                   >
                     {roleChangingId === member.id
-                      ? <Loader2 size={16} className="animate-spin" />
-                      : member.role === 'admin' ? <ShieldOff size={16} /> : <ShieldCheck size={16} />}
+                      ? <Loader2 size={12} className="animate-spin" />
+                      : `→${ROLE_LABEL[ROLE_NEXT[member.role]]}`}
                   </button>
                 )}
                 <button
@@ -183,6 +192,19 @@ export function StaffManagement() {
                 placeholder="横浜市"
                 className="w-full border rounded-lg px-3 py-2 text-sm" />
               <p className="text-xs text-gray-400 mt-1">例: 横浜市・葛飾区 など市区町村までご入力ください</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">役割</label>
+              <div className="flex gap-2">
+                {(['user', 'staff', 'admin'] as Role[]).map(r => (
+                  <button key={r} type="button"
+                    onClick={() => setAddRole(r)}
+                    className={`flex-1 py-1.5 rounded-lg text-sm border transition-colors
+                      ${addRole === r ? 'bg-dandy-500 text-white border-dandy-500' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {ROLE_LABEL[r]}
+                  </button>
+                ))}
+              </div>
             </div>
             {error && <p className="text-red-500 text-xs">{error}</p>}
             <button onClick={handleAdd}

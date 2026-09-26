@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { AppData, Member, ShiftMonth, ShiftSlot, StaffResponse } from '@/types'
+import { AppData, Member, Role, ShiftMonth, ShiftSlot, StaffResponse } from '@/types'
 import { initGoogleAuth, requestAccessToken, getValidToken, fetchUserInfo, clearToken } from '@/services/googleAuth'
 import {
   createSpreadsheet, loadAllData, appendRow,
@@ -290,9 +290,9 @@ export function useStore() {
   const currentAdmin = data.members.find(m => m.id === data.currentAdminId) ?? null
 
   // ─── メンバー ────────────────────────────────────────
-  const addMember = useCallback((member: Omit<Member, 'id' | 'createdAt' | 'lastAccessedAt' | 'role'>) => {
+  const addMember = useCallback((member: Omit<Member, 'id' | 'createdAt' | 'lastAccessedAt' | 'role'> & { role?: Role }) => {
     const newMember: Member = {
-      ...member, id: generateId(), role: 'user',
+      ...member, id: generateId(), role: member.role ?? 'user',
       createdAt: new Date().toISOString(), lastAccessedAt: new Date().toISOString(),
     }
     update(prev => ({ ...prev, members: [...prev.members, newMember] }))
@@ -300,7 +300,7 @@ export function useStore() {
     return newMember
   }, [update, syncToSheets])
 
-  const updateMemberRole = useCallback(async (memberId: string, role: 'user' | 'admin', operatorId: string) => {
+  const updateMemberRole = useCallback(async (memberId: string, role: Role, operatorId: string) => {
     if (memberId === operatorId) throw new Error('自身の権限は変更できません')
     const admins = data.members.filter(m => m.role === 'admin')
     const target = data.members.find(m => m.id === memberId)
@@ -415,6 +415,67 @@ export function useStore() {
       staffResponses: prev.staffResponses.filter(r => r.shiftSlotId !== slotId),
     }))
     syncToSheets((token, id) => deleteRowById(token, id, 'shift_slots', slotId))
+  }, [update, syncToSheets])
+
+  // 社員シフト1エントリを登録（同じ member+date の既存エントリは削除して上書き）
+  const addStaffScheduleEntry = useCallback((
+    monthId: string,
+    memberId: string,
+    date: string,
+    type: 'work' | 'off',
+    locationName: string
+  ) => {
+    const existing = data.shiftSlots.filter(
+      s => s.isStaffSchedule && s.shiftMonthId === monthId && s.date === date &&
+        data.staffResponses.some(r => r.shiftSlotId === s.id && r.memberId === memberId && r.isAssigned)
+    )
+    const newSlot: ShiftSlot = {
+      id: generateId(),
+      shiftMonthId: monthId,
+      locationName: type === 'off' ? '休み' : locationName,
+      date,
+      requiredCount: 1,
+      status: 'confirmed',
+      note: '',
+      isPrivate: type === 'off',
+      isStaffSchedule: true,
+    }
+    const newResponse: StaffResponse = {
+      id: generateId(),
+      shiftSlotId: newSlot.id,
+      memberId,
+      isAvailable: true,
+      submittedAt: new Date().toISOString(),
+      isAssigned: true,
+    }
+    const existingIds = existing.map(s => s.id)
+    update(prev => ({
+      ...prev,
+      shiftSlots: [
+        ...prev.shiftSlots.filter(s => !existingIds.includes(s.id)),
+        newSlot,
+      ],
+      staffResponses: [
+        ...prev.staffResponses.filter(r => !existingIds.includes(r.shiftSlotId)),
+        newResponse,
+      ],
+    }))
+    syncToSheets(async (token, id) => {
+      for (const sid of existingIds) await deleteRowById(token, id, 'shift_slots', sid)
+      await appendRow(token, id, 'shift_slots', newSlot as unknown as Record<string, unknown>)
+      await appendRow(token, id, 'staff_responses', newResponse as unknown as Record<string, unknown>)
+    })
+  }, [data.shiftSlots, data.staffResponses, update, syncToSheets])
+
+  const deleteStaffScheduleEntry = useCallback((slotId: string) => {
+    update(prev => ({
+      ...prev,
+      shiftSlots: prev.shiftSlots.filter(s => s.id !== slotId),
+      staffResponses: prev.staffResponses.filter(r => r.shiftSlotId !== slotId),
+    }))
+    syncToSheets(async (token, id) => {
+      await deleteRowById(token, id, 'shift_slots', slotId)
+    })
   }, [update, syncToSheets])
 
   const copyShiftSlots = useCallback((fromMonthId: string, toMonthId: string, mode: 'date' | 'weekday') => {
@@ -542,6 +603,7 @@ export function useStore() {
     addMember, updateMember, updateMemberRole, deleteMember,
     createShiftMonth, publishShiftMonth, closeShiftMonth, reopenShiftMonth,
     addShiftSlot, updateShiftSlot, deleteShiftSlot, copyShiftSlots, confirmShiftSlot, unconfirmShiftSlot,
+    addStaffScheduleEntry, deleteStaffScheduleEntry,
     submitResponse, getSlotResponses, deleteStaffResponse,
   }
 }

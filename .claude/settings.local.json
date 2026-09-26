@@ -23,7 +23,8 @@
       "Bash(npx tsc *)",
       "Bash(xargs cat *)",
       "Bash(rm -rf app/.git)",
-      "WebFetch(domain:www.instagram.com)"
+      "WebFetch(domain:www.instagram.com)",
+      "Bash(mkdir -p \"/Users/sotaro/Claud Code/cloudflare操作案内\")"
     ]
   }
 }
