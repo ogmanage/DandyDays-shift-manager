@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { format, getDaysInMonth, parseISO } from 'date-fns'
 import { ja } from 'date-fns/locale'
-import { Plus, Trash2, Copy, Share2, Lock, ChevronDown, ChevronUp, UserCheck, CheckCircle2, AlertCircle, Pencil, X, RefreshCw, MessageSquare, RotateCcw, CalendarDays, Store } from 'lucide-react'
+import { Plus, Trash2, Copy, Share2, Lock, ChevronDown, ChevronUp, UserCheck, CheckCircle2, Pencil, X, RefreshCw, MessageSquare, RotateCcw, CalendarDays, Store } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { useStoreContext } from '@/store/StoreContext'
 import { getGasUrl } from '@/services/gasService'
@@ -89,6 +89,9 @@ export function ShiftManagement() {
   // LINE共有テキスト
   const [lineCopied, setLineCopied] = useState(false)
   const [calendarCopied, setCalendarCopied] = useState(false)
+
+  // カレンダーメンバーフィルター
+  const [calendarFilterMemberId, setCalendarFilterMemberId] = useState('')
 
   const generateLineText = () => {
     const lines: string[] = [`📅 ${selYear}年${selMonth}月 確定シフト\n`]
@@ -695,17 +698,25 @@ export function ShiftManagement() {
         <div className="bg-white rounded-xl border overflow-hidden">
           <div className="bg-gray-50 px-4 py-3 border-b flex items-center justify-between gap-2 flex-wrap">
             <h2 className="font-semibold text-gray-700">{selYear}年{selMonth}月 シフトカレンダー</h2>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* メンバーフィルター */}
+              <select
+                value={calendarFilterMemberId}
+                onChange={e => setCalendarFilterMemberId(e.target.value)}
+                className="text-xs border rounded-lg px-2 py-1.5 bg-white text-gray-700 min-w-[100px]">
+                <option value="">全員</option>
+                {data.members.map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
               {publicCalendarUrl ? (
                 <button
                   onClick={handleCopyCalendarUrl}
                   className="flex items-center gap-1.5 text-xs font-bold bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors">
                   <CalendarDays size={13} />
-                  {calendarCopied ? '✓ コピー済み' : '確定シフト閲覧URLをコピー'}
+                  {calendarCopied ? '✓ コピー済み' : '閲覧URLをコピー'}
                 </button>
-              ) : (
-                <span className="text-xs text-gray-400">GAS URL未設定</span>
-              )}
+              ) : null}
               <button
                 onClick={() => {
                   if (window.innerWidth < 640) {
@@ -714,22 +725,37 @@ export function ShiftManagement() {
                     window.print()
                   }
                 }}
-                className="text-xs border px-4 py-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 text-gray-600 min-h-[40px]">
-                印刷・保存
+                className="text-xs border px-3 py-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 text-gray-600">
+                印刷
               </button>
             </div>
           </div>
           <div className="p-2">
             {/* 凡例 */}
-            <div className="flex gap-3 mb-3 px-1 text-xs text-gray-500">
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded-sm bg-dandy-100 border border-dandy-200 inline-block" />
-                募集中
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded-sm bg-green-100 border border-green-200 inline-block" />
-                確定済み
-              </span>
+            <div className="flex gap-3 mb-3 px-1 text-xs text-gray-500 flex-wrap">
+              {calendarFilterMemberId ? (
+                <>
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded-sm bg-green-400 inline-block" />
+                    自分のシフト（確定）
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded-sm bg-dandy-300 inline-block" />
+                    希望済み（未確定）
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded-sm bg-dandy-100 border border-dandy-200 inline-block" />
+                    募集中
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded-sm bg-green-100 border border-green-200 inline-block" />
+                    確定済み
+                  </span>
+                </>
+              )}
             </div>
             {/* 曜日ヘッダー */}
             <div className="grid grid-cols-7 mb-1">
@@ -750,24 +776,45 @@ export function ShiftManagement() {
                 const daySlots = slotsByDate.get(dateStr) ?? []
                 const dow = i % 7
                 const isToday = selYear === now.getFullYear() && selMonth === now.getMonth() + 1 && dayNum === now.getDate()
+
+                // メンバーフィルター適用
+                const filteredSlots = calendarFilterMemberId
+                  ? daySlots.filter(slot => {
+                      const responses = data.staffResponses.filter(r => r.shiftSlotId === slot.id && r.memberId === calendarFilterMemberId)
+                      return responses.some(r => r.isAvailable || r.isAssigned)
+                    })
+                  : daySlots
+
+                // フィルター中で自分に関係ない日はうっすら表示
+                const isDimmed = calendarFilterMemberId && filteredSlots.length === 0 && daySlots.length > 0
+
                 return (
-                  <div key={i} className="bg-white p-1 min-h-16">
+                  <div key={i} className={`p-1 min-h-16 ${isDimmed ? 'bg-gray-50' : 'bg-white'}`}>
                     <p className={`text-xs font-medium mb-0.5 w-5 h-5 flex items-center justify-center rounded-full
-                      ${isToday ? 'bg-dandy-500 text-white' : dow === 0 ? 'text-red-500' : dow === 6 ? 'text-dandy-400' : 'text-gray-700'}`}>
+                      ${isToday ? 'bg-dandy-500 text-white' : dow === 0 ? 'text-red-500' : dow === 6 ? 'text-dandy-400' : isDimmed ? 'text-gray-300' : 'text-gray-700'}`}>
                       {dayNum}
                     </p>
                     <div className="space-y-0.5">
-                      {daySlots.map(slot => (
-                        <div key={slot.id}
-                          onClick={() => setCalendarPopupSlot(slot)}
-                          className={`text-xs rounded px-1 py-0.5 truncate leading-tight cursor-pointer
-                            ${slot.status === 'confirmed'
-                              ? 'bg-green-100 text-green-700 border border-green-200 hover:bg-green-200'
-                              : 'bg-dandy-50 text-dandy-600 border border-dandy-100 hover:bg-dandy-100'}`}
-                          title={`${slot.locationName}（必要${slot.requiredCount}名）`}>
-                          {slot.locationName}
-                        </div>
-                      ))}
+                      {filteredSlots.map(slot => {
+                        const isAssigned = calendarFilterMemberId
+                          ? data.staffResponses.some(r => r.shiftSlotId === slot.id && r.memberId === calendarFilterMemberId && r.isAssigned)
+                          : slot.status === 'confirmed'
+                        return (
+                          <div key={slot.id}
+                            onClick={() => setCalendarPopupSlot(slot)}
+                            className={`text-xs rounded px-1 py-0.5 truncate leading-tight cursor-pointer
+                              ${calendarFilterMemberId
+                                ? isAssigned
+                                  ? 'bg-green-400 text-white border border-green-500 hover:bg-green-500'
+                                  : 'bg-dandy-300 text-white border border-dandy-400 hover:bg-dandy-400'
+                                : slot.status === 'confirmed'
+                                  ? 'bg-green-100 text-green-700 border border-green-200 hover:bg-green-200'
+                                  : 'bg-dandy-50 text-dandy-600 border border-dandy-100 hover:bg-dandy-100'}`}
+                            title={`${slot.locationName}（必要${slot.requiredCount}名）`}>
+                            {slot.locationName}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )
@@ -1105,13 +1152,6 @@ export function ShiftManagement() {
                   )}
                 </p>
               </div>
-
-              {selectedMembers.length > 0 && !data.members.filter(m => selectedMembers.includes(m.id) && m.role === 'admin').length && (
-                <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 rounded p-2">
-                  <AlertCircle size={13} />
-                  管理者を1名以上選択してください
-                </div>
-              )}
 
               {error && <p className="text-red-500 text-xs">{error}</p>}
               <button onClick={handleConfirm}
