@@ -624,7 +624,7 @@ export function ShiftManagement() {
                             {isConfirmed && (
                               <button onClick={() => openConfirm(slot)}
                                 className="flex items-center gap-1 text-xs bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600 shrink-0">
-                                <UserCheck size={13} /> 担当変更
+                                <UserCheck size={13} /> 担当追加
                               </button>
                             )}
                           </div>
