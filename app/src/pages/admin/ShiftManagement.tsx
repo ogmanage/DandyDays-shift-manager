@@ -27,7 +27,9 @@ export function ShiftManagement() {
       const m = data.shiftMonths.find(m => m.id === state.monthId)
       if (m) return { year: m.year, month: m.month }
     }
-    return { year: now.getFullYear(), month: now.getMonth() + 1 }
+    // デフォルトは来月
+    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    return { year: next.getFullYear(), month: next.getMonth() + 1 }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [selYear, setSelYear] = useState(initialMonth.year)
@@ -51,27 +53,29 @@ export function ShiftManagement() {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
   const gasUrl = getGasUrl() ?? ''
 
-  // 店舗一括追加モーダル
+  // 店舗一括追加モーダル（カレンダー日付選択）
   const [showStore, setShowStore] = useState(false)
-  const [storeDays, setStoreDays] = useState<number[]>([]) // 0=日,1=月,...,6=土
+  const [storeDates, setStoreDates] = useState<Set<string>>(new Set())
   const [storeCount, setStoreCount] = useState(1)
 
+  const toggleStoreDate = (dateStr: string) => {
+    setStoreDates(prev => {
+      const next = new Set(prev)
+      next.has(dateStr) ? next.delete(dateStr) : next.add(dateStr)
+      return next
+    })
+  }
+
   const handleAddStore = () => {
-    if (storeDays.length === 0) return
+    if (storeDates.size === 0) return
     const month = currentMonth ?? createShiftMonth(selYear, selMonth)
-    const daysInMonth = getDaysInMonth(new Date(selYear, selMonth - 1))
-    let added = 0
-    for (let d = 1; d <= daysInMonth; d++) {
-      const date = new Date(selYear, selMonth - 1, d)
-      if (storeDays.includes(date.getDay())) {
-        const dateStr = `${selYear}-${String(selMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-        addShiftSlot({ shiftMonthId: month.id, locationName: '店舗', date: dateStr, requiredCount: storeCount, note: '11:00-18:00' })
-        added++
-      }
-    }
-    alert(`店舗シフトを${added}枠追加しました`)
+    const sorted = Array.from(storeDates).sort()
+    sorted.forEach(dateStr => {
+      addShiftSlot({ shiftMonthId: month.id, locationName: '店舗', date: dateStr, requiredCount: storeCount, note: '11:00-18:00' })
+    })
+    alert(`店舗シフトを${sorted.length}枠追加しました`)
     setShowStore(false)
-    setStoreDays([])
+    setStoreDates(new Set())
   }
 
   // カレンダー詳細ポップアップ（④）
@@ -868,52 +872,86 @@ export function ShiftManagement() {
         </Modal>
       )}
 
-      {showStore && (
-        <Modal title="🏪 店舗シフトを一括追加" onClose={() => { setShowStore(false); setStoreDays([]) }}>
-          <div className="space-y-4">
-            <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-              <p className="text-xs text-amber-800 font-medium">店舗 ・ 11:00-18:00（固定）</p>
-              <p className="text-xs text-amber-600 mt-0.5">選んだ曜日の {selYear}年{selMonth}月 すべての日に追加します</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">追加する曜日を選択</label>
-              <div className="grid grid-cols-7 gap-1">
-                {DOW.map((label, dow) => (
-                  <button
-                    key={dow}
-                    type="button"
-                    onClick={() => setStoreDays(prev =>
-                      prev.includes(dow) ? prev.filter(d => d !== dow) : [...prev, dow]
-                    )}
-                    className={`py-2 rounded-lg text-sm font-bold transition-colors
-                      ${storeDays.includes(dow)
-                        ? dow === 0 ? 'bg-red-500 text-white' : dow === 6 ? 'bg-dandy-500 text-white' : 'bg-amber-500 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                    {label}
-                  </button>
-                ))}
+      {showStore && (() => {
+        const daysInMonth = getDaysInMonth(new Date(selYear, selMonth - 1))
+        const firstDow = new Date(selYear, selMonth - 1, 1).getDay()
+        const cells = Array.from({ length: Math.ceil((firstDow + daysInMonth) / 7) * 7 }, (_, i) => {
+          const d = i - firstDow + 1
+          return (d >= 1 && d <= daysInMonth) ? d : null
+        })
+        return (
+          <Modal title="🏪 店舗シフトを一括追加" onClose={() => { setShowStore(false); setStoreDates(new Set()) }}>
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                <p className="text-xs text-amber-800 font-medium">店舗 ・ 11:00-18:00（固定）</p>
+                <p className="text-xs text-amber-600 mt-0.5">日付をタップして選択 → 一括追加</p>
               </div>
-              {storeDays.length > 0 && (
-                <p className="text-xs text-amber-700 mt-2 bg-amber-50 rounded px-2 py-1">
-                  選択中: {storeDays.sort().map(d => DOW[d]).join('・')}曜日
+
+              {/* カレンダー */}
+              <div>
+                <div className="grid grid-cols-7 mb-1">
+                  {DOW.map((d, i) => (
+                    <div key={d} className={`text-center text-xs font-medium py-1
+                      ${i === 0 ? 'text-red-500' : i === 6 ? 'text-dandy-400' : 'text-gray-500'}`}>{d}</div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-0.5">
+                  {cells.map((dayNum, i) => {
+                    if (!dayNum) return <div key={i} />
+                    const dateStr = `${selYear}-${String(selMonth).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`
+                    const selected = storeDates.has(dateStr)
+                    const dow = i % 7
+                    // すでに店舗枠がある日はグレー
+                    const hasStore = data.shiftSlots.some(s =>
+                      s.date === dateStr && s.locationName === '店舗' && s.shiftMonthId === currentMonth?.id
+                    )
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        disabled={hasStore}
+                        onClick={() => toggleStoreDate(dateStr)}
+                        className={`aspect-square rounded-lg text-sm font-medium transition-colors
+                          ${hasStore
+                            ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                            : selected
+                              ? 'bg-amber-500 text-white'
+                              : dow === 0
+                                ? 'text-red-500 hover:bg-red-50'
+                                : dow === 6
+                                  ? 'text-dandy-500 hover:bg-dandy-50'
+                                  : 'text-gray-700 hover:bg-gray-100'}`}>
+                        {dayNum}
+                        {hasStore && <span className="block text-[8px] leading-none">済</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {storeDates.size > 0 && (
+                <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1.5">
+                  {storeDates.size}日選択中
                 </p>
               )}
+
+              <div>
+                <label className="block text-sm font-medium mb-1">必要人数</label>
+                <input type="number" min={1} max={10} value={storeCount}
+                  onChange={e => setStoreCount(Number(e.target.value))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" />
+              </div>
+
+              <button
+                onClick={handleAddStore}
+                disabled={storeDates.size === 0}
+                className="w-full bg-amber-500 hover:bg-amber-600 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed">
+                {storeDates.size === 0 ? '日付を選択してください' : `${storeDates.size}日分の店舗シフトを追加`}
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">必要人数</label>
-              <input type="number" min={1} max={10} value={storeCount}
-                onChange={e => setStoreCount(Number(e.target.value))}
-                className="w-full border rounded-lg px-3 py-2 text-sm" />
-            </div>
-            <button
-              onClick={handleAddStore}
-              disabled={storeDays.length === 0}
-              className="w-full bg-amber-500 hover:bg-amber-600 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed">
-              {storeDays.length === 0 ? '曜日を選択してください' : `${selMonth}月の${storeDays.sort().map(d => DOW[d]).join('・')}曜日に追加`}
-            </button>
-          </div>
-        </Modal>
-      )}
+          </Modal>
+        )
+      })()}
 
       {showCopy && (
         <Modal title="シフト枠をコピー" onClose={() => setShowCopy(false)}>
