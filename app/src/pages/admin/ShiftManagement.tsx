@@ -1051,10 +1051,19 @@ export function ShiftManagement() {
                                       ({DOW[d.getDay()]})
                                     </span>
                                   </span>
-                                  <div className="flex gap-1.5 flex-wrap flex-1">
+                                  <div className="flex gap-2 flex-wrap flex-1">
                                     {daySlots.map(s => {
                                       const isSelected = selected === s.id
                                       const isAlreadyAssigned = assignedRegularSlotIds.has(s.id)
+                                      // この枠に希望を出したメンバー（バイト）
+                                      const availableMembers = data.staffResponses
+                                        .filter(r => r.shiftSlotId === s.id && r.isAvailable)
+                                        .map(r => data.members.find(m => m.id === r.memberId))
+                                        .filter(Boolean)
+                                      const assignedMembers = data.staffResponses
+                                        .filter(r => r.shiftSlotId === s.id && r.isAssigned)
+                                        .map(r => data.members.find(m => m.id === r.memberId))
+                                        .filter(Boolean)
                                       return (
                                         <button key={s.id}
                                           onClick={() => {
@@ -1065,14 +1074,31 @@ export function ShiftManagement() {
                                               return next
                                             })
                                           }}
-                                          className={`text-sm px-3 py-1 rounded-lg border transition-colors
+                                          className={`text-left rounded-xl border transition-colors px-3 py-2 min-w-24
                                             ${isSelected
                                               ? 'bg-dandy-500 text-white border-dandy-500'
                                               : isAlreadyAssigned
-                                                ? 'bg-dandy-100 text-dandy-600 border-dandy-200'
-                                                : 'bg-white text-gray-600 border-gray-300 hover:bg-dandy-50 hover:border-dandy-300'}`}>
-                                          {isAlreadyAssigned && !isSelected ? '✓ ' : ''}{s.locationName}
-                                          {(s.startTime || s.endTime) ? ` ${s.startTime ?? '?'}〜${s.endTime ?? '?'}` : ''}
+                                                ? 'bg-dandy-50 text-dandy-700 border-dandy-200'
+                                                : 'bg-white text-gray-700 border-gray-300 hover:bg-dandy-50 hover:border-dandy-300'}`}>
+                                          <p className="text-sm font-medium">
+                                            {isAlreadyAssigned && !isSelected ? '✓ ' : ''}{s.locationName}
+                                            {(s.startTime || s.endTime) ? <span className="text-xs font-normal ml-1 opacity-80">{s.startTime ?? '?'}〜{s.endTime ?? '?'}</span> : null}
+                                          </p>
+                                          {/* 希望者・確定者 */}
+                                          {(availableMembers.length > 0 || assignedMembers.length > 0) && (
+                                            <div className={`mt-1 text-xs space-y-0.5 ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
+                                              {assignedMembers.length > 0 && (
+                                                <p className={`${isSelected ? 'text-white/90' : 'text-dandy-600'}`}>
+                                                  確定: {assignedMembers.map(m => m!.name).join('・')}
+                                                </p>
+                                              )}
+                                              {availableMembers.filter(m => !assignedMembers.includes(m)).length > 0 && (
+                                                <p>
+                                                  希望: {availableMembers.filter(m => !assignedMembers.includes(m)).map(m => m!.name).join('・')}
+                                                </p>
+                                              )}
+                                            </div>
+                                          )}
                                         </button>
                                       )
                                     })}
