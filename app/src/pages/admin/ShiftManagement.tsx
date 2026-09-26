@@ -15,7 +15,7 @@ type Tab = 'slots' | 'responses' | 'confirmed' | 'calendar' | 'staff_schedule'
 export function ShiftManagement() {
   const { data, createShiftMonth, addShiftSlot, updateShiftSlot, deleteShiftSlot,
           publishShiftMonth, closeShiftMonth, reopenShiftMonth, copyShiftSlots, confirmShiftSlot, unconfirmShiftSlot,
-          addStaffScheduleEntry, deleteStaffScheduleEntry,
+          addStaffScheduleEntry, deleteStaffScheduleEntry, assignStaffToSlot,
           getSlotResponses, deleteStaffResponse, submitResponse, refreshData, isLoadingSheets } = useStoreContext()
   const location = useLocation()
 
@@ -45,9 +45,11 @@ export function ShiftManagement() {
 
   // 追加モーダル
   const [newDate, setNewDate] = useState('')
-  const [newLocation, setNewLocation] = useState('')
+  const [newLocation, setNewLocation] = useState('キッチンカー')
   const [newCount, setNewCount] = useState(1)
   const [newNote, setNewNote] = useState('')
+  const [newStartTime, setNewStartTime] = useState('')
+  const [newEndTime, setNewEndTime] = useState('')
   const [deadlineDate, setDeadlineDate] = useState('')
   const [copyFrom, setCopyFrom] = useState('')
   const [copyMode, setCopyMode] = useState<'date' | 'weekday'>('date')
@@ -92,6 +94,9 @@ export function ShiftManagement() {
   const [staffScheduleModal, setStaffScheduleModal] = useState<{ date: string } | null>(null)
   const [staffScheduleType, setStaffScheduleType] = useState<'work' | 'off'>('work')
   const [staffScheduleLocation, setStaffScheduleLocation] = useState('')
+  // 休み一括入力モード
+  const [staffOffBulkMode, setStaffOffBulkMode] = useState(false)
+  const [staffOffBulkDates, setStaffOffBulkDates] = useState<Set<string>>(new Set())
 
   // LINE共有テキスト
   const [lineCopied, setLineCopied] = useState(false)
@@ -132,6 +137,8 @@ export function ShiftManagement() {
   const [editLocation, setEditLocation] = useState('')
   const [editCount, setEditCount] = useState(1)
   const [editNote, setEditNote] = useState('')
+  const [editStartTime, setEditStartTime] = useState('')
+  const [editEndTime, setEditEndTime] = useState('')
 
   // シフト希望タブを開いたとき、未知のメンバーがいれば自動更新
   useEffect(() => {
@@ -208,8 +215,12 @@ export function ShiftManagement() {
   const handleAddSlot = () => {
     if (!newDate || !newLocation) { setError('日付と場所を入力してください'); return }
     const month = currentMonth ?? createShiftMonth(selYear, selMonth)
-    addShiftSlot({ shiftMonthId: month.id, locationName: newLocation, date: newDate, requiredCount: newCount, note: newNote })
-    setNewDate(''); setNewLocation(''); setNewCount(1); setNewNote(''); setError(''); setShowAddSlot(false)
+    addShiftSlot({
+      shiftMonthId: month.id, locationName: newLocation, date: newDate,
+      requiredCount: newCount, note: newNote,
+      startTime: newStartTime || undefined, endTime: newEndTime || undefined,
+    })
+    setNewDate(''); setNewCount(1); setNewNote(''); setNewStartTime(''); setNewEndTime(''); setError(''); setShowAddSlot(false)
   }
 
   const handlePublish = () => {
@@ -274,6 +285,8 @@ export function ShiftManagement() {
     setEditLocation(slot.locationName)
     setEditCount(slot.requiredCount)
     setEditNote(slot.note ?? '')
+    setEditStartTime(slot.startTime ?? '')
+    setEditEndTime(slot.endTime ?? '')
     setEditingSlot(slot)
   }
 
@@ -284,6 +297,8 @@ export function ShiftManagement() {
       locationName: editLocation,
       requiredCount: editCount,
       note: editNote,
+      startTime: editStartTime || undefined,
+      endTime: editEndTime || undefined,
     })
     setEditingSlot(null)
   }
@@ -337,13 +352,13 @@ export function ShiftManagement() {
         <div className="flex flex-wrap gap-2">
           {(!currentMonth || currentMonth.status === 'draft') && (
             <>
+              <button onClick={() => { setNewLocation('キッチンカー'); setNewStartTime(''); setNewEndTime(''); setShowAddSlot(true) }}
+                className="flex items-center gap-1 bg-dandy-500 hover:bg-dandy-600 text-white text-sm px-3 py-1.5 rounded-lg">
+                <Plus size={14} /> キッチンカー
+              </button>
               <button onClick={() => setShowStore(true)}
                 className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white text-sm px-3 py-1.5 rounded-lg">
                 <Store size={14} /> 店舗
-              </button>
-              <button onClick={() => setShowAddSlot(true)}
-                className="flex items-center gap-1 bg-dandy-500 hover:bg-dandy-600 text-white text-sm px-3 py-1.5 rounded-lg">
-                <Plus size={14} /> 枠を追加
               </button>
               <button onClick={() => setShowCopy(true)}
                 className="flex items-center gap-1 border text-sm px-3 py-1.5 rounded-lg hover:bg-gray-50">
@@ -359,13 +374,13 @@ export function ShiftManagement() {
           )}
           {currentMonth?.status === 'published' && (
             <>
+              <button onClick={() => { setNewLocation('キッチンカー'); setNewStartTime(''); setNewEndTime(''); setShowAddSlot(true) }}
+                className="flex items-center gap-1 bg-dandy-500 hover:bg-dandy-600 text-white text-sm px-3 py-1.5 rounded-lg">
+                <Plus size={14} /> キッチンカー
+              </button>
               <button onClick={() => setShowStore(true)}
                 className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white text-sm px-3 py-1.5 rounded-lg">
                 <Store size={14} /> 店舗
-              </button>
-              <button onClick={() => setShowAddSlot(true)}
-                className="flex items-center gap-1 bg-dandy-500 hover:bg-dandy-600 text-white text-sm px-3 py-1.5 rounded-lg">
-                <Plus size={14} /> 枠を追加
               </button>
               <button onClick={handleClose}
                 className="flex items-center gap-1 border border-red-300 text-red-600 text-sm px-3 py-1.5 rounded-lg hover:bg-red-50">
@@ -460,7 +475,7 @@ export function ShiftManagement() {
       {activeTab === 'slots' && (
         slotsByDate.size === 0 ? (
           <div className="bg-white rounded-xl border p-8 text-center text-gray-400 text-sm">
-            シフト枠がありません。「枠を追加」から登録してください。
+            シフト枠がありません。「キッチンカー」または「店舗」から登録してください。
           </div>
         ) : (
           <div className="space-y-2">
@@ -491,6 +506,11 @@ export function ShiftManagement() {
                           <div>
                             <span className="font-medium text-sm">{slot.locationName}</span>
                             <span className="text-xs text-gray-500 ml-2">必要: {slot.requiredCount}名</span>
+                            {(slot.startTime || slot.endTime) && (
+                              <p className="text-xs text-dandy-500 mt-0.5 font-medium">
+                                {slot.startTime ?? '?'}〜{slot.endTime ?? '?'}
+                              </p>
+                            )}
                             {slot.note && <p className="text-xs text-gray-400 mt-0.5">{slot.note}</p>}
                           </div>
                           <div className="flex items-center gap-1">
@@ -553,6 +573,9 @@ export function ShiftManagement() {
                             <div className="flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-medium text-sm">{slot.locationName}</span>
+                                {(slot.startTime || slot.endTime) && (
+                                  <span className="text-xs text-dandy-500 font-medium">{slot.startTime ?? '?'}〜{slot.endTime ?? '?'}</span>
+                                )}
                                 <span className="text-xs text-gray-500">必要: {slot.requiredCount}名</span>
                                 {isConfirmed ? (
                                   <Badge label={`確定済み 人数不足 ${assignedCount}/${slot.requiredCount}名`} variant="red" />
@@ -869,14 +892,21 @@ export function ShiftManagement() {
         const staffMembers = data.members.filter(m => m.role === 'staff')
         const selectedMember = staffMembers.find(m => m.id === staffScheduleMemberId)
 
-        // 選択メンバーの社員シフトエントリ（date → slot）
-        const memberEntries = new Map<string, typeof staffScheduleSlots[0]>()
+        // 社員の isStaffSchedule エントリ（date → slot）
+        const staffOffEntries = new Map<string, typeof staffScheduleSlots[0]>()
         staffScheduleSlots.forEach(s => {
           const hasAssigned = data.staffResponses.some(
             r => r.shiftSlotId === s.id && r.memberId === staffScheduleMemberId && r.isAssigned
           )
-          if (hasAssigned) memberEntries.set(s.date, s)
+          if (hasAssigned) staffOffEntries.set(s.date, s)
         })
+
+        // 既存シフト枠への担当割当（date → assigned slot ids）
+        const assignedRegularSlotIds = new Set(
+          data.staffResponses
+            .filter(r => r.memberId === staffScheduleMemberId && r.isAssigned)
+            .map(r => r.shiftSlotId)
+        )
 
         const firstDow = currentMonth ? new Date(selYear, selMonth - 1, 1).getDay() : 0
         const days = currentMonth ? getDaysInMonth(new Date(selYear, selMonth - 1)) : 0
@@ -886,8 +916,16 @@ export function ShiftManagement() {
           return d >= 1 && d <= days ? d : null
         })
 
-        const openModal = (dateStr: string) => {
-          const existing = memberEntries.get(dateStr)
+        const handleDayClick = (dateStr: string) => {
+          if (staffOffBulkMode) {
+            setStaffOffBulkDates(prev => {
+              const next = new Set(prev)
+              next.has(dateStr) ? next.delete(dateStr) : next.add(dateStr)
+              return next
+            })
+            return
+          }
+          const existing = staffOffEntries.get(dateStr)
           setStaffScheduleType(existing ? (existing.locationName === '休み' ? 'off' : 'work') : 'work')
           setStaffScheduleLocation(existing && existing.locationName !== '休み' ? existing.locationName : '')
           setStaffScheduleModal({ date: dateStr })
@@ -896,19 +934,17 @@ export function ShiftManagement() {
         const saveEntry = () => {
           if (!staffScheduleModal || !currentMonth || !staffScheduleMemberId) return
           if (staffScheduleType === 'work' && !staffScheduleLocation.trim()) return
-          addStaffScheduleEntry(
-            currentMonth.id,
-            staffScheduleMemberId,
-            staffScheduleModal.date,
-            staffScheduleType,
-            staffScheduleLocation.trim()
-          )
+          addStaffScheduleEntry(currentMonth.id, staffScheduleMemberId, staffScheduleModal.date, staffScheduleType, staffScheduleLocation.trim())
           setStaffScheduleModal(null)
         }
 
-        const deleteEntry = (slotId: string) => {
-          deleteStaffScheduleEntry(slotId)
-          setStaffScheduleModal(null)
+        const handleBulkOff = () => {
+          if (!currentMonth || !staffScheduleMemberId || staffOffBulkDates.size === 0) return
+          Array.from(staffOffBulkDates).forEach(date => {
+            addStaffScheduleEntry(currentMonth.id, staffScheduleMemberId, date, 'off', '')
+          })
+          setStaffOffBulkMode(false)
+          setStaffOffBulkDates(new Set())
         }
 
         return (
@@ -919,36 +955,60 @@ export function ShiftManagement() {
               </div>
             ) : (
               <>
-                {/* メンバー選択 */}
-                <div className="bg-white rounded-xl border p-4">
-                  <label className="text-sm font-medium text-gray-700 block mb-2">社員を選択</label>
-                  <div className="flex gap-2 flex-wrap">
-                    {staffMembers.map(m => (
-                      <button key={m.id}
-                        onClick={() => setStaffScheduleMemberId(m.id)}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors
-                          ${staffScheduleMemberId === m.id
-                            ? 'bg-dandy-500 text-white border-dandy-500'
-                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
-                        {m.name}
-                      </button>
-                    ))}
+                {/* メンバー選択 + 操作ボタン */}
+                <div className="bg-white rounded-xl border p-4 space-y-3">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-2">社員を選択</label>
+                    <div className="flex gap-2 flex-wrap">
+                      {staffMembers.map(m => (
+                        <button key={m.id}
+                          onClick={() => { setStaffScheduleMemberId(m.id); setStaffOffBulkMode(false); setStaffOffBulkDates(new Set()) }}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors
+                            ${staffScheduleMemberId === m.id
+                              ? 'bg-dandy-500 text-white border-dandy-500'
+                              : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
+                          {m.name}
+                        </button>
+                      ))}
+                    </div>
                   </div>
+                  {selectedMember && (
+                    <div className="flex gap-2 pt-1 border-t">
+                      <button
+                        onClick={() => { setStaffOffBulkMode(v => !v); setStaffOffBulkDates(new Set()) }}
+                        className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors
+                          ${staffOffBulkMode ? 'bg-orange-400 text-white border-orange-400' : 'bg-white text-orange-600 border-orange-300 hover:bg-orange-50'}`}>
+                        {staffOffBulkMode ? '✕ キャンセル' : '休みを一括入力'}
+                      </button>
+                      {staffOffBulkMode && staffOffBulkDates.size > 0 && (
+                        <button onClick={handleBulkOff}
+                          className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-orange-500 text-white hover:bg-orange-600">
+                          {staffOffBulkDates.size}日を休みに登録
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {selectedMember && currentMonth && (
                   <>
+                    {staffOffBulkMode && (
+                      <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-2 text-sm text-orange-700">
+                        休みにしたい日付をタップで選択してください（複数選択可）。バイト側には表示されません。
+                      </div>
+                    )}
                     <div className="bg-white rounded-xl border overflow-hidden">
                       <div className="bg-gray-50 px-4 py-2 border-b flex items-center justify-between">
                         <span className="text-sm font-semibold text-gray-700">
-                          {selectedMember.name} の {selYear}年{selMonth}月シフト
+                          {selectedMember.name} の {selYear}年{selMonth}月
                         </span>
                         <div className="flex items-center gap-3 text-xs text-gray-500">
-                          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-dandy-400 inline-block" />出勤</span>
-                          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-orange-300 inline-block" />休み</span>
+                          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-dandy-300 inline-block" />出勤</span>
+                          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-300 inline-block" />休み</span>
+                          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-gray-200 inline-block" />枠あり</span>
                         </div>
                       </div>
-                      <div className="p-3">
+                      <div className="p-2">
                         <div className="grid grid-cols-7 mb-1">
                           {DOW.map((d, i) => (
                             <div key={d} className={`text-center text-xs font-medium py-1
@@ -957,24 +1017,43 @@ export function ShiftManagement() {
                         </div>
                         <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded overflow-hidden">
                           {cells.map((dayNum, i) => {
-                            if (!dayNum) return <div key={i} className="bg-gray-50 min-h-16" />
+                            if (!dayNum) return <div key={i} className="bg-gray-50 min-h-14" />
                             const dateStr = `${selYear}-${String(selMonth).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`
-                            const entry = memberEntries.get(dateStr)
+                            const staffOff = staffOffEntries.get(dateStr)
+                            const dayShiftSlots = slotsByDate.get(dateStr) ?? []
+                            const assignedSlots = dayShiftSlots.filter(s => assignedRegularSlotIds.has(s.id))
+                            const isBulkSelected = staffOffBulkDates.has(dateStr)
                             const dow = i % 7
+
+                            let bgClass = 'bg-white'
+                            if (staffOff?.locationName === '休み') bgClass = 'bg-orange-50'
+                            else if (assignedSlots.length > 0 || (staffOff && staffOff.locationName !== '休み')) bgClass = 'bg-dandy-50'
+                            if (isBulkSelected) bgClass = 'bg-orange-200'
+
                             return (
-                              <button key={i} onClick={() => openModal(dateStr)}
-                                className={`p-1 min-h-16 text-left hover:opacity-80 transition-opacity
-                                  ${entry ? (entry.locationName === '休み' ? 'bg-orange-50' : 'bg-dandy-50') : 'bg-white'}`}>
+                              <button key={i} onClick={() => handleDayClick(dateStr)}
+                                className={`p-1 min-h-14 text-left transition-colors hover:opacity-80 ${bgClass}`}>
                                 <p className={`text-xs font-medium mb-0.5 w-5 h-5 flex items-center justify-center rounded-full
                                   ${dow === 0 ? 'text-red-500' : dow === 6 ? 'text-dandy-400' : 'text-gray-700'}`}>
                                   {dayNum}
                                 </p>
-                                {entry && (
-                                  <span className={`text-xs rounded px-1 py-0.5 truncate block leading-tight
-                                    ${entry.locationName === '休み'
-                                      ? 'bg-orange-200 text-orange-700'
-                                      : 'bg-dandy-200 text-dandy-800'}`}>
-                                    {entry.locationName}
+                                {/* 既存シフト枠（参考表示・グレー） */}
+                                {dayShiftSlots.filter(s => !assignedRegularSlotIds.has(s.id)).map(s => (
+                                  <span key={s.id} className="text-xs rounded px-0.5 truncate block leading-tight bg-gray-100 text-gray-500 mb-0.5">
+                                    {s.locationName}
+                                  </span>
+                                ))}
+                                {/* 担当確定済みシフト枠（青） */}
+                                {assignedSlots.map(s => (
+                                  <span key={s.id} className="text-xs rounded px-0.5 truncate block leading-tight bg-dandy-200 text-dandy-800 mb-0.5">
+                                    ✓{s.locationName}
+                                  </span>
+                                ))}
+                                {/* 社員専用エントリ */}
+                                {staffOff && (
+                                  <span className={`text-xs rounded px-0.5 truncate block leading-tight
+                                    ${staffOff.locationName === '休み' ? 'bg-orange-200 text-orange-700' : 'bg-dandy-200 text-dandy-800'}`}>
+                                    {staffOff.locationName}
                                   </span>
                                 )}
                               </button>
@@ -984,31 +1063,45 @@ export function ShiftManagement() {
                       </div>
                     </div>
 
-                    {/* 一覧サマリー */}
-                    {memberEntries.size > 0 && (
+                    {/* 登録済み一覧 */}
+                    {(staffOffEntries.size > 0 || assignedRegularSlotIds.size > 0) && (
                       <div className="bg-white rounded-xl border divide-y overflow-hidden">
                         <div className="bg-gray-50 px-4 py-2 text-xs font-medium text-gray-600">登録済みスケジュール</div>
-                        {Array.from(memberEntries.entries())
+                        {/* 既存枠への担当 */}
+                        {slots
+                          .filter(s => assignedRegularSlotIds.has(s.id))
+                          .map(s => {
+                            const d = parseISO(s.date)
+                            return (
+                              <div key={s.id} className="flex items-center gap-3 px-4 py-2.5">
+                                <span className="text-sm text-gray-700 w-14 shrink-0">
+                                  {format(d, 'M/d', { locale: ja })}
+                                  <span className={`ml-1 ${d.getDay() === 0 ? 'text-red-500' : d.getDay() === 6 ? 'text-dandy-400' : 'text-gray-400'}`}>({DOW[d.getDay()]})</span>
+                                </span>
+                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-dandy-100 text-dandy-700">{s.locationName}</span>
+                                <button onClick={() => assignStaffToSlot(s.id, staffScheduleMemberId, false)}
+                                  className="ml-auto text-gray-300 hover:text-red-500 p-0.5"><X size={14} /></button>
+                              </div>
+                            )
+                          })}
+                        {/* 社員専用エントリ */}
+                        {Array.from(staffOffEntries.entries())
                           .sort(([a], [b]) => a.localeCompare(b))
                           .map(([date, slot]) => {
                             const d = parseISO(date)
                             return (
                               <div key={date} className="flex items-center gap-3 px-4 py-2.5">
-                                <span className="text-sm text-gray-700 w-16 shrink-0">
+                                <span className="text-sm text-gray-700 w-14 shrink-0">
                                   {format(d, 'M/d', { locale: ja })}
-                                  <span className={`ml-1 ${d.getDay() === 0 ? 'text-red-500' : d.getDay() === 6 ? 'text-dandy-400' : 'text-gray-400'}`}>
-                                    ({DOW[d.getDay()]})
-                                  </span>
+                                  <span className={`ml-1 ${d.getDay() === 0 ? 'text-red-500' : d.getDay() === 6 ? 'text-dandy-400' : 'text-gray-400'}`}>({DOW[d.getDay()]})</span>
                                 </span>
                                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium
                                   ${slot.locationName === '休み' ? 'bg-orange-100 text-orange-700' : 'bg-dandy-100 text-dandy-700'}`}>
                                   {slot.locationName}
                                 </span>
-                                {slot.isPrivate && <span className="text-xs text-gray-400">（バイト非表示）</span>}
-                                <button onClick={() => deleteEntry(slot.id)}
-                                  className="ml-auto text-gray-300 hover:text-red-500 p-0.5">
-                                  <X size={14} />
-                                </button>
+                                {slot.isPrivate && <span className="text-xs text-gray-400">非表示</span>}
+                                <button onClick={() => deleteStaffScheduleEntry(slot.id)}
+                                  className="ml-auto text-gray-300 hover:text-red-500 p-0.5"><X size={14} /></button>
                               </div>
                             )
                           })}
@@ -1019,8 +1112,8 @@ export function ShiftManagement() {
               </>
             )}
 
-            {/* 日付クリックモーダル */}
-            {staffScheduleModal && selectedMember && (
+            {/* 日付クリックモーダル（通常モード） */}
+            {staffScheduleModal && selectedMember && !staffOffBulkMode && (
               <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-4"
                 onClick={() => setStaffScheduleModal(null)}>
                 <div className="bg-white rounded-2xl w-full max-w-sm p-5 space-y-4"
@@ -1034,11 +1127,41 @@ export function ShiftManagement() {
                     </button>
                   </div>
 
+                  {/* 既存シフト枠への担当割当 */}
+                  {(() => {
+                    const daySlotsMod = slotsByDate.get(staffScheduleModal.date) ?? []
+                    if (daySlotsMod.length === 0) return null
+                    return (
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 mb-2">この日のシフト枠</p>
+                        <div className="space-y-1.5">
+                          {daySlotsMod.map(s => {
+                            const isAssigned = assignedRegularSlotIds.has(s.id)
+                            return (
+                              <button key={s.id}
+                                onClick={() => { assignStaffToSlot(s.id, staffScheduleMemberId, !isAssigned); setStaffScheduleModal(null) }}
+                                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-sm transition-colors
+                                  ${isAssigned ? 'bg-dandy-50 border-dandy-300 text-dandy-700' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+                                <span>{s.locationName}{(s.startTime || s.endTime) ? ` ${s.startTime ?? '?'}〜${s.endTime ?? '?'}` : ''}</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${isAssigned ? 'bg-dandy-200 text-dandy-700' : 'bg-gray-100 text-gray-500'}`}>
+                                  {isAssigned ? '✓ 出勤' : '+ 出勤する'}
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <div className="mt-3 border-t pt-3">
+                          <p className="text-xs font-medium text-gray-500 mb-2">カスタム登録</p>
+                        </div>
+                      </div>
+                    )
+                  })()}
+
                   <div className="flex gap-2">
                     <button onClick={() => setStaffScheduleType('work')}
                       className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors
                         ${staffScheduleType === 'work' ? 'bg-dandy-500 text-white border-dandy-500' : 'bg-white text-gray-600 border-gray-300'}`}>
-                      出勤
+                      出勤（カスタム）
                     </button>
                     <button onClick={() => setStaffScheduleType('off')}
                       className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors
@@ -1050,14 +1173,10 @@ export function ShiftManagement() {
                   {staffScheduleType === 'work' && (
                     <div>
                       <label className="block text-sm font-medium mb-1">勤務場所</label>
-                      <input
-                        type="text"
-                        value={staffScheduleLocation}
+                      <input type="text" value={staffScheduleLocation}
                         onChange={e => setStaffScheduleLocation(e.target.value)}
-                        placeholder="例: 店舗 / 横浜スタジアム"
-                        className="w-full border rounded-lg px-3 py-2 text-sm"
-                        autoFocus
-                      />
+                        placeholder="横浜スタジアム 等"
+                        className="w-full border rounded-lg px-3 py-2 text-sm" autoFocus />
                     </div>
                   )}
 
@@ -1066,9 +1185,8 @@ export function ShiftManagement() {
                   </p>
 
                   <div className="flex gap-2">
-                    {memberEntries.get(staffScheduleModal.date) && (
-                      <button
-                        onClick={() => deleteEntry(memberEntries.get(staffScheduleModal!.date)!.id)}
+                    {staffOffEntries.get(staffScheduleModal.date) && (
+                      <button onClick={() => { deleteStaffScheduleEntry(staffOffEntries.get(staffScheduleModal!.date)!.id); setStaffScheduleModal(null) }}
                         className="px-4 py-2 text-sm border border-red-200 text-red-500 rounded-lg hover:bg-red-50">
                         削除
                       </button>
@@ -1089,7 +1207,7 @@ export function ShiftManagement() {
       {/* ── モーダル群 ── */}
 
       {showAddSlot && (
-        <Modal title="シフト枠を追加" onClose={() => setShowAddSlot(false)}>
+        <Modal title={`${newLocation}枠を追加`} onClose={() => setShowAddSlot(false)}>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">日付</label>
@@ -1100,9 +1218,29 @@ export function ShiftManagement() {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">場所</label>
+              <div className="flex gap-2">
+                {['キッチンカー', '店舗'].map(loc => (
+                  <button key={loc} type="button"
+                    onClick={() => setNewLocation(loc)}
+                    className={`flex-1 py-1.5 rounded-lg text-sm border transition-colors
+                      ${newLocation === loc ? 'bg-dandy-500 text-white border-dandy-500' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {loc}
+                  </button>
+                ))}
+              </div>
               <input type="text" value={newLocation} onChange={e => setNewLocation(e.target.value)}
-                placeholder="横浜スタジアム"
-                className="w-full border rounded-lg px-3 py-2 text-sm" />
+                placeholder="その他の場所"
+                className="mt-2 w-full border rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">時間（任意）</label>
+              <div className="flex items-center gap-2">
+                <input type="time" value={newStartTime} onChange={e => setNewStartTime(e.target.value)}
+                  className="flex-1 border rounded-lg px-3 py-2 text-sm" />
+                <span className="text-gray-500 text-sm">〜</span>
+                <input type="time" value={newEndTime} onChange={e => setNewEndTime(e.target.value)}
+                  className="flex-1 border rounded-lg px-3 py-2 text-sm" />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">必要人数</label>
@@ -1135,8 +1273,28 @@ export function ShiftManagement() {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">場所</label>
+              <div className="flex gap-2 mb-2">
+                {['キッチンカー', '店舗'].map(loc => (
+                  <button key={loc} type="button"
+                    onClick={() => setEditLocation(loc)}
+                    className={`flex-1 py-1.5 rounded-lg text-sm border transition-colors
+                      ${editLocation === loc ? 'bg-dandy-500 text-white border-dandy-500' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {loc}
+                  </button>
+                ))}
+              </div>
               <input type="text" value={editLocation} onChange={e => setEditLocation(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">時間（任意）</label>
+              <div className="flex items-center gap-2">
+                <input type="time" value={editStartTime} onChange={e => setEditStartTime(e.target.value)}
+                  className="flex-1 border rounded-lg px-3 py-2 text-sm" />
+                <span className="text-gray-500 text-sm">〜</span>
+                <input type="time" value={editEndTime} onChange={e => setEditEndTime(e.target.value)}
+                  className="flex-1 border rounded-lg px-3 py-2 text-sm" />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">必要人数</label>

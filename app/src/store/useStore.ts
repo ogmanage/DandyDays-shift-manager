@@ -467,6 +467,30 @@ export function useStore() {
     })
   }, [data.shiftSlots, data.staffResponses, update, syncToSheets])
 
+  // 既存シフト枠への社員の担当割当・解除
+  const assignStaffToSlot = useCallback((slotId: string, memberId: string, assign: boolean) => {
+    const existing = data.staffResponses.find(r => r.shiftSlotId === slotId && r.memberId === memberId)
+    if (assign) {
+      if (!existing) {
+        const newResp: StaffResponse = {
+          id: generateId(), shiftSlotId: slotId, memberId,
+          isAvailable: true, submittedAt: new Date().toISOString(), isAssigned: true,
+        }
+        update(prev => ({ ...prev, staffResponses: [...prev.staffResponses, newResp] }))
+        syncToSheets((token, id) => appendRow(token, id, 'staff_responses', newResp as unknown as Record<string, unknown>))
+      } else if (!existing.isAssigned) {
+        const updated = { ...existing, isAssigned: true, isAvailable: true }
+        update(prev => ({ ...prev, staffResponses: prev.staffResponses.map(r => r.id === existing.id ? updated : r) }))
+        syncToSheets((token, id) => updateRowById(token, id, 'staff_responses', updated as unknown as Record<string, unknown>))
+      }
+    } else {
+      if (existing) {
+        update(prev => ({ ...prev, staffResponses: prev.staffResponses.filter(r => r.id !== existing.id) }))
+        syncToSheets((token, id) => deleteRowById(token, id, 'staff_responses', existing.id))
+      }
+    }
+  }, [data.staffResponses, update, syncToSheets])
+
   const deleteStaffScheduleEntry = useCallback((slotId: string) => {
     update(prev => ({
       ...prev,
@@ -603,7 +627,7 @@ export function useStore() {
     addMember, updateMember, updateMemberRole, deleteMember,
     createShiftMonth, publishShiftMonth, closeShiftMonth, reopenShiftMonth,
     addShiftSlot, updateShiftSlot, deleteShiftSlot, copyShiftSlots, confirmShiftSlot, unconfirmShiftSlot,
-    addStaffScheduleEntry, deleteStaffScheduleEntry,
+    addStaffScheduleEntry, deleteStaffScheduleEntry, assignStaffToSlot,
     submitResponse, getSlotResponses, deleteStaffResponse,
   }
 }

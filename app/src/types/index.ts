@@ -31,6 +31,8 @@ export interface ShiftSlot {
   requiredCount: number
   status: ShiftSlotStatus
   note: string
+  startTime?: string        // "HH:MM"
+  endTime?: string          // "HH:MM"
   isPrivate?: boolean       // true = バイト側に非表示（社員の休みなど）
   isStaffSchedule?: boolean // true = 社員シフト（通常シフト枠と区別）
 }
@@ -42,6 +44,8 @@ export interface StaffResponse {
   isAvailable: boolean
   submittedAt: string
   isAssigned: boolean
+  requestedStartTime?: string // バイトが希望する開始時間（部分参加）
+  requestedEndTime?: string   // バイトが希望する終了時間（部分参加）
 }
 
 export interface AppData {
