@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { AppData, Member, Role, ShiftMonth, ShiftSlot, StaffResponse } from '@/types'
-import { initGoogleAuth, requestAccessToken, getValidToken, fetchUserInfo, clearToken } from '@/services/googleAuth'
+import { initGoogleAuth, requestAccessToken, getValidToken, fetchUserInfo, clearToken, hasCachedToken } from '@/services/googleAuth'
 import {
   createSpreadsheet, loadAllData, appendRow,
   updateRowById, deleteRowById, checkSpreadsheetExists,
@@ -64,6 +64,9 @@ export function useStore() {
   const syncToSheets = useCallback(async (fn: (token: string, sheetId: string) => Promise<void>) => {
     const sheetId = localStorage.getItem(SHEET_ID_KEY)
     if (!sheetId || !CLIENT_ID) return
+    // キャッシュ済みトークンがない場合はログインポップアップを出さずにスキップ
+    // （バイト側ページからの呼び出しで誤って Google ログインが出るのを防ぐ）
+    if (!hasCachedToken()) return
     try {
       setSyncStatus('syncing')
       const token = await getValidToken()

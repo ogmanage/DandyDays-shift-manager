@@ -109,6 +109,19 @@ export function clearToken() {
   try { sessionStorage.removeItem(TOKEN_CACHE_KEY) } catch {}
 }
 
+/** キャッシュ済みの有効なトークンがあるか（OAuth ポップアップを出さずに確認） */
+export function hasCachedToken(): boolean {
+  if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) return true
+  try {
+    const stored = sessionStorage.getItem(TOKEN_CACHE_KEY)
+    if (stored) {
+      const parsed: { value: string; expiresAt: number } = JSON.parse(stored)
+      if (parsed?.expiresAt && Date.now() < parsed.expiresAt - 60_000) return true
+    }
+  } catch {}
+  return false
+}
+
 export async function fetchUserInfo(accessToken: string): Promise<GoogleUserInfo> {
   const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
     headers: { Authorization: `Bearer ${accessToken}` },

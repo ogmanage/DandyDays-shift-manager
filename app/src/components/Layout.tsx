@@ -55,19 +55,26 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         <span className="font-bold text-lg tracking-wide">シフト管理</span>
         <div className="flex items-center gap-3 text-sm">
           <span className="hidden sm:block">{currentAdmin?.name}</span>
+          {/* ── 管理者専用操作エリア ──────────────────────────────
+              ⚙️  設定: GAS Web App URL の変更（バイト回答機能に必要）
+              🗄️  DB: Google スプレッドシートの切り替え（通常操作では不要）
+              →   ログアウト: セッション終了
+              ※ 通常のシフト管理では使わない。誤操作に注意。
+          ──────────────────────────────────────────────────── */}
           <button
             onClick={() => { setSettingsGasUrl(getGasUrl() ?? ''); setShowSettings(true) }}
             className="flex items-center gap-1 hover:text-dandy-100"
-            title="設定">
+            title="⚙️ 設定 — GAS URL の変更（通常は触らない）">
             <Settings size={15} />
           </button>
           <button
             onClick={() => { setShowChangeSheet(true); setNewSheetId(spreadsheetId ?? '') }}
             className="flex items-center gap-1 hover:text-dandy-100"
-            title="スプレッドシートを変更">
+            title="🗄️ スプレッドシート切替（通常は触らない）">
             <Database size={15} />
           </button>
-          <button onClick={handleLogout} className="flex items-center gap-1 hover:text-dandy-100">
+          <button onClick={handleLogout} className="flex items-center gap-1 hover:text-dandy-100"
+            title="ログアウト">
             <LogOut size={16} />
             <span className="hidden sm:block">ログアウト</span>
           </button>
