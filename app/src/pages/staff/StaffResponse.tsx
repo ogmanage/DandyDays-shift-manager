@@ -268,7 +268,6 @@ export function StaffResponse() {
   }
 
   const handleSubmit = () => {
-    if (selectedCount === 0) return
     setSubmitted(true)
     setTimeout(() => setSubmitted(false), 4000)
   }
@@ -506,16 +505,18 @@ export function StaffResponse() {
           <p className="text-center text-xs text-gray-400">
             {selectedCount > 0
               ? `✓ ${selectedCount}枠回答済み（タップのたびに自動保存されます）`
-              : 'タップして参加できる枠を選んでください'}
+              : '参加できる枠がない場合もそのまま送信できます'}
           </p>
           <button onClick={handleSubmit}
             className={`w-full font-bold py-3.5 rounded-xl text-sm transition-colors
               ${submitted
                 ? 'bg-green-500 text-white'
-                : selectedCount > 0
-                  ? 'bg-dandy-500 active:bg-dandy-600 text-white'
-                  : 'bg-gray-100 text-gray-400'}`}>
-            {submitted ? '✓ 送信完了！ありがとうございました' : `回答を完了する（${selectedCount}枠）`}
+                : 'bg-dandy-500 active:bg-dandy-600 text-white'}`}>
+            {submitted
+              ? '✓ 送信完了！ありがとうございました'
+              : selectedCount > 0
+                ? `回答を完了する（${selectedCount}枠）`
+                : '回答を送信する（0枠）'}
           </button>
         </div>
       </div>
