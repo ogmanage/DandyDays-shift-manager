@@ -1055,9 +1055,13 @@ export function ShiftManagement() {
                                     {daySlots.map(s => {
                                       const isSelected = selected === s.id
                                       const isAlreadyAssigned = assignedRegularSlotIds.has(s.id)
-                                      // この枠に希望を出したメンバー（バイト）
+                                      // 選択中の社員本人がこの枠を希望しているか
+                                      const memberWants = data.staffResponses.some(
+                                        r => r.shiftSlotId === s.id && r.memberId === staffScheduleMemberId && r.isAvailable
+                                      )
+                                      // この枠に希望を出した他のメンバー
                                       const availableMembers = data.staffResponses
-                                        .filter(r => r.shiftSlotId === s.id && r.isAvailable)
+                                        .filter(r => r.shiftSlotId === s.id && r.isAvailable && r.memberId !== staffScheduleMemberId)
                                         .map(r => data.members.find(m => m.id === r.memberId))
                                         .filter(Boolean)
                                       const assignedMembers = data.staffResponses
@@ -1074,16 +1078,23 @@ export function ShiftManagement() {
                                               return next
                                             })
                                           }}
-                                          className={`text-left rounded-xl border transition-colors px-3 py-2 min-w-24
+                                          className={`text-left rounded-xl border-2 transition-colors px-3 py-2 min-w-28
                                             ${isSelected
                                               ? 'bg-dandy-500 text-white border-dandy-500'
                                               : isAlreadyAssigned
-                                                ? 'bg-dandy-50 text-dandy-700 border-dandy-200'
-                                                : 'bg-white text-gray-700 border-gray-300 hover:bg-dandy-50 hover:border-dandy-300'}`}>
-                                          <p className="text-sm font-medium">
-                                            {isAlreadyAssigned && !isSelected ? '✓ ' : ''}{s.locationName}
-                                            {(s.startTime || s.endTime) ? <span className="text-xs font-normal ml-1 opacity-80">{s.startTime ?? '?'}〜{s.endTime ?? '?'}</span> : null}
-                                          </p>
+                                                ? 'bg-dandy-50 text-dandy-700 border-dandy-300'
+                                                : memberWants
+                                                  ? 'bg-amber-50 text-gray-700 border-amber-400'
+                                                  : 'bg-white text-gray-700 border-gray-200 hover:border-dandy-300 hover:bg-dandy-50'}`}>
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <p className="text-sm font-medium">
+                                              {isAlreadyAssigned && !isSelected ? '✓ ' : ''}{s.locationName}
+                                              {(s.startTime || s.endTime) ? <span className="text-xs font-normal ml-1 opacity-80">{s.startTime ?? '?'}〜{s.endTime ?? '?'}</span> : null}
+                                            </p>
+                                            {memberWants && !isSelected && (
+                                              <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-800">本人希望</span>
+                                            )}
+                                          </div>
                                           {/* 希望者・確定者 */}
                                           {(availableMembers.length > 0 || assignedMembers.length > 0) && (
                                             <div className={`mt-1 text-xs space-y-0.5 ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
@@ -1092,10 +1103,8 @@ export function ShiftManagement() {
                                                   確定: {assignedMembers.map(m => m!.name).join('・')}
                                                 </p>
                                               )}
-                                              {availableMembers.filter(m => !assignedMembers.includes(m)).length > 0 && (
-                                                <p>
-                                                  希望: {availableMembers.filter(m => !assignedMembers.includes(m)).map(m => m!.name).join('・')}
-                                                </p>
+                                              {availableMembers.length > 0 && (
+                                                <p>希望: {availableMembers.map(m => m!.name).join('・')}</p>
                                               )}
                                             </div>
                                           )}
