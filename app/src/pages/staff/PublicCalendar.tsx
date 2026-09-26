@@ -26,6 +26,7 @@ export function PublicCalendar() {
   const [error, setError] = useState('')
   const [gasData, setGasData] = useState<GasData | null>(null)
   const [popupSlot, setPopupSlot] = useState<ShiftSlot | null>(null)
+  const [filterMemberId, setFilterMemberId] = useState('')
 
   useEffect(() => {
     if (!monthId || !gasUrl) { setError('URLが不正です'); setLoading(false); return }
@@ -76,14 +77,48 @@ export function PublicCalendar() {
     return members.filter(m => assignedIds.includes(m.id))
   }
 
+  const isMemberAssigned = (slotId: string, memberId: string) =>
+    responses.some(r => r.shiftSlotId === slotId && r.memberId === memberId && r.isAssigned)
+
+  // フィルター適用済みslot判定
+  const slotMatchesFilter = (slotId: string) =>
+    !filterMemberId || isMemberAssigned(slotId, filterMemberId)
+
   const now = new Date()
 
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
       {/* ヘッダー */}
-      <div className="bg-dandy-500 text-white px-4 py-4 flex items-center gap-2">
-        <CalendarDays size={20} />
-        <h1 className="font-bold text-lg">{shiftMonth.year}年{shiftMonth.month}月 シフト表</h1>
+      <div className="bg-dandy-500 text-white px-4 pt-4 pb-3 space-y-3">
+        <div className="flex items-center gap-2">
+          <CalendarDays size={20} />
+          <h1 className="font-bold text-lg">{shiftMonth.year}年{shiftMonth.month}月 シフト表</h1>
+        </div>
+        {/* メンバーフィルター */}
+        {members.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setFilterMemberId('')}
+              className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors
+                ${!filterMemberId ? 'bg-white text-dandy-600' : 'bg-white/20 text-white hover:bg-white/30'}`}>
+              全員
+            </button>
+            {members.map(m => (
+              <button
+                key={m.id}
+                onClick={() => setFilterMemberId(prev => prev === m.id ? '' : m.id)}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors
+                  ${filterMemberId === m.id ? 'bg-white text-dandy-600' : 'bg-white/20 text-white hover:bg-white/30'}`}>
+                {m.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {filterMemberId && (
+          <p className="text-xs text-white/80">
+            {members.find(m => m.id === filterMemberId)?.name} さんのシフトのみ表示中
+          </p>
+        )}
       </div>
 
       <div className="max-w-2xl mx-auto px-3 pt-4 space-y-4">
@@ -114,20 +149,29 @@ export function PublicCalendar() {
                     const daySlots = slotsByDate.get(dateStr) ?? []
                     const dow = i % 7
                     const isToday = shiftMonth.year === now.getFullYear() && shiftMonth.month === now.getMonth() + 1 && dayNum === now.getDate()
+                    const hasMyShift = filterMemberId && daySlots.some(s => slotMatchesFilter(s.id))
+                    const isDimmed = filterMemberId && !hasMyShift
                     return (
-                      <div key={i} className="bg-white p-1 min-h-14">
+                      <div key={i} className={`p-1 min-h-14 ${isDimmed ? 'bg-gray-50' : 'bg-white'}`}>
                         <p className={`text-xs font-medium mb-0.5 w-5 h-5 flex items-center justify-center rounded-full
-                          ${isToday ? 'bg-dandy-500 text-white' : dow === 0 ? 'text-red-500' : dow === 6 ? 'text-dandy-400' : 'text-gray-700'}`}>
+                          ${isToday ? 'bg-dandy-500 text-white' : dow === 0 ? isDimmed ? 'text-red-200' : 'text-red-500' : dow === 6 ? isDimmed ? 'text-dandy-200' : 'text-dandy-400' : isDimmed ? 'text-gray-300' : 'text-gray-700'}`}>
                           {dayNum}
                         </p>
                         <div className="space-y-0.5">
-                          {daySlots.map(slot => (
-                            <button key={slot.id}
-                              onClick={() => setPopupSlot(slot)}
-                              className="w-full text-left text-xs rounded px-1 py-0.5 truncate leading-tight bg-green-100 text-green-700 border border-green-200 hover:bg-green-200 active:bg-green-300">
-                              {slot.locationName}
-                            </button>
-                          ))}
+                          {daySlots.map(slot => {
+                            const isMatch = slotMatchesFilter(slot.id)
+                            if (filterMemberId && !isMatch) return null
+                            return (
+                              <button key={slot.id}
+                                onClick={() => setPopupSlot(slot)}
+                                className={`w-full text-left text-xs rounded px-1 py-0.5 truncate leading-tight
+                                  ${filterMemberId && isMatch
+                                    ? 'bg-green-400 text-white border border-green-500 hover:bg-green-500 active:bg-green-600'
+                                    : 'bg-green-100 text-green-700 border border-green-200 hover:bg-green-200 active:bg-green-300'}`}>
+                                {slot.locationName}
+                              </button>
+                            )
+                          })}
                         </div>
                       </div>
                     )
@@ -141,20 +185,23 @@ export function PublicCalendar() {
               <h2 className="text-sm font-semibold text-gray-600 px-1">確定シフト一覧</h2>
               {Array.from(slotsByDate.entries())
                 .sort(([a], [b]) => a.localeCompare(b))
+                .filter(([, daySlots]) => !filterMemberId || daySlots.some(s => slotMatchesFilter(s.id)))
                 .map(([date, daySlots]) => {
                   const d = parseISO(date)
+                  const visibleSlots = filterMemberId ? daySlots.filter(s => slotMatchesFilter(s.id)) : daySlots
                   return (
                     <div key={date} className="bg-white rounded-xl border overflow-hidden">
-                      <div className="bg-green-50 px-4 py-2 border-b border-green-100">
+                      <div className="bg-green-50 px-4 py-2 border-b border-green-100 flex items-center gap-2">
                         <span className="font-medium text-sm text-green-800">
                           {format(d, 'M/d', { locale: ja })}
                           <span className={`ml-1 ${d.getDay() === 0 ? 'text-red-500' : d.getDay() === 6 ? 'text-dandy-500' : 'text-green-700'}`}>
                             ({DOW[d.getDay()]})
                           </span>
                         </span>
+                        {filterMemberId && <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded-full font-medium">あなたのシフト</span>}
                       </div>
                       <div className="divide-y">
-                        {daySlots.map(slot => {
+                        {visibleSlots.map(slot => {
                           const assigned = getAssignedMembers(slot.id)
                           return (
                             <button key={slot.id}
