@@ -182,7 +182,12 @@ export function ShiftManagement() {
       : `${window.location.origin}${window.location.pathname}${route}`
   })() : null
 
-  const pendingSlots = slots.filter(s => s.status !== 'confirmed')
+  // シフト希望タブ: 未確定 OR 確定済みでも人数不足のスロット
+  const pendingSlots = slots.filter(s => {
+    if (s.status !== 'confirmed') return true
+    const assignedCount = data.staffResponses.filter(r => r.shiftSlotId === s.id && r.isAssigned).length
+    return assignedCount < s.requiredCount
+  })
   const confirmedSlots = slots.filter(s => s.status === 'confirmed')
   const undecidedCount = slots.filter(s => s.status === 'undecided').length
 
@@ -503,8 +508,13 @@ export function ShiftManagement() {
         ) : (
           <div className="space-y-2">
             {Array.from(slotsByDate.entries()).map(([date, daySlots]) => {
-              const unconfirmed = daySlots.filter(s => s.status !== 'confirmed')
-              if (unconfirmed.length === 0) return null
+              // 未確定 OR 確定済みでも人数不足のスロットを表示
+              const relevantSlots = daySlots.filter(s => {
+                if (s.status !== 'confirmed') return true
+                const assignedCount = data.staffResponses.filter(r => r.shiftSlotId === s.id && r.isAssigned).length
+                return assignedCount < s.requiredCount
+              })
+              if (relevantSlots.length === 0) return null
               const d = parseISO(date)
               return (
                 <div key={date} className="bg-white rounded-xl border overflow-hidden">
@@ -517,22 +527,32 @@ export function ShiftManagement() {
                     </span>
                   </div>
                   <div className="divide-y">
-                    {unconfirmed.map(slot => {
+                    {relevantSlots.map(slot => {
                       const responses = getSlotResponses(slot.id)
+                      const isConfirmed = slot.status === 'confirmed'
+                      const assignedCount = data.staffResponses.filter(r => r.shiftSlotId === slot.id && r.isAssigned).length
                       const isFull = responses.length >= slot.requiredCount
                       return (
-                        <div key={slot.id} className="px-4 py-3">
+                        <div key={slot.id} className={`px-4 py-3 ${isConfirmed ? 'bg-orange-50' : ''}`}>
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-medium text-sm">{slot.locationName}</span>
                                 <span className="text-xs text-gray-500">必要: {slot.requiredCount}名</span>
-                                {isFull
-                                  ? <Badge label="充足" variant="blue" />
-                                  : <Badge label={`${responses.length}/${slot.requiredCount}名`} variant="gray" />
-                                }
+                                {isConfirmed ? (
+                                  <Badge label={`確定済み 人数不足 ${assignedCount}/${slot.requiredCount}名`} variant="red" />
+                                ) : isFull ? (
+                                  <Badge label="充足" variant="blue" />
+                                ) : (
+                                  <Badge label={`${responses.length}/${slot.requiredCount}名`} variant="gray" />
+                                )}
                               </div>
-                              {responses.length > 0 ? (
+                              {isConfirmed ? (
+                                /* 確定済み人数不足: 担当済みメンバーを表示 */
+                                <p className="text-xs text-orange-600 mt-1">
+                                  担当確定: {assignedCount}名（あと{slot.requiredCount - assignedCount}名必要）
+                                </p>
+                              ) : responses.length > 0 ? (
                                 <div className="mt-1.5 space-y-0.5">
                                   {responses.map((r, i) => {
                                     const m = data.members.find(mb => mb.id === r.memberId)
@@ -545,7 +565,6 @@ export function ShiftManagement() {
                                           {m?.role === 'admin' && <span className="ml-1 text-xs text-dandy-500">（管理者）</span>}
                                           {m?.city && <span className="ml-1 text-xs text-gray-400">{m.city}</span>}
                                         </p>
-                                        {/* ④ 誤データ削除ボタン */}
                                         <button
                                           onClick={() => {
                                             if (confirm(`${m?.name ?? '?'}さんの希望を削除しますか？`)) {
@@ -564,8 +583,8 @@ export function ShiftManagement() {
                                 <p className="text-xs text-gray-400 mt-1">まだ回答がありません</p>
                               )}
 
-                              {/* 手動追加 */}
-                              {manualAddSlotId === slot.id ? (
+                              {/* 手動追加（未確定スロットのみ） */}
+                              {!isConfirmed && (manualAddSlotId === slot.id ? (
                                 <div className="mt-2 flex items-center gap-2">
                                   <select
                                     value={manualAddMemberId}
@@ -594,12 +613,18 @@ export function ShiftManagement() {
                                   className="mt-2 text-xs text-dandy-500 hover:text-dandy-600 flex items-center gap-1">
                                   <Plus size={12} /> メンバーを追加
                                 </button>
-                              )}
+                              ))}
                             </div>
-                            {responses.length > 0 && (
+                            {!isConfirmed && responses.length > 0 && (
                               <button onClick={() => openConfirm(slot)}
                                 className="flex items-center gap-1 text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 shrink-0">
                                 <UserCheck size={13} /> 確定する
+                              </button>
+                            )}
+                            {isConfirmed && (
+                              <button onClick={() => openConfirm(slot)}
+                                className="flex items-center gap-1 text-xs bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600 shrink-0">
+                                <UserCheck size={13} /> 担当変更
                               </button>
                             )}
                           </div>
