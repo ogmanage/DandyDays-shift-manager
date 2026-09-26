@@ -374,6 +374,19 @@ export function useStore() {
     if (updated) syncToSheets((token, id) => updateRowById(token, id, 'shift_months', updated! as unknown as Record<string, unknown>))
   }, [update, syncToSheets])
 
+  const reopenShiftMonth = useCallback((monthId: string) => {
+    let updated: ShiftMonth | undefined
+    update(prev => {
+      const months = prev.shiftMonths.map(m => {
+        if (m.id !== monthId) return m
+        updated = { ...m, status: 'published', closedAt: null }
+        return updated
+      })
+      return { ...prev, shiftMonths: months }
+    })
+    if (updated) syncToSheets((token, id) => updateRowById(token, id, 'shift_months', updated! as unknown as Record<string, unknown>))
+  }, [update, syncToSheets])
+
   // ─── シフト枠 ─────────────────────────────────────
   const addShiftSlot = useCallback((slot: Omit<ShiftSlot, 'id' | 'status'>) => {
     const newSlot: ShiftSlot = { ...slot, id: generateId(), status: 'draft' }
@@ -527,7 +540,7 @@ export function useStore() {
     data, currentAdmin, syncStatus, spreadsheetId, isLoadingSheets,
     loginWithGoogle, createNewSheet, connectExistingSheet, disconnectSheet, logout, refreshData, changeSheet, saveGasUrlToSheet,
     addMember, updateMember, updateMemberRole, deleteMember,
-    createShiftMonth, publishShiftMonth, closeShiftMonth,
+    createShiftMonth, publishShiftMonth, closeShiftMonth, reopenShiftMonth,
     addShiftSlot, updateShiftSlot, deleteShiftSlot, copyShiftSlots, confirmShiftSlot, unconfirmShiftSlot,
     submitResponse, getSlotResponses, deleteStaffResponse,
   }

@@ -13,7 +13,7 @@ type Tab = 'slots' | 'responses' | 'confirmed' | 'calendar'
 
 export function ShiftManagement() {
   const { data, createShiftMonth, addShiftSlot, updateShiftSlot, deleteShiftSlot,
-          publishShiftMonth, closeShiftMonth, copyShiftSlots, confirmShiftSlot, unconfirmShiftSlot,
+          publishShiftMonth, closeShiftMonth, reopenShiftMonth, copyShiftSlots, confirmShiftSlot, unconfirmShiftSlot,
           getSlotResponses, deleteStaffResponse, submitResponse, refreshData, isLoadingSheets } = useStoreContext()
 
   const now = new Date()
@@ -303,28 +303,45 @@ export function ShiftManagement() {
               </button>
             </>
           )}
+          {currentMonth?.status === 'closed' && (
+            <button
+              onClick={() => { if (confirm('締め切りを取り消して「募集中」に戻しますか？\nバイトが再度回答できるようになります。')) reopenShiftMonth(currentMonth.id) }}
+              className="flex items-center gap-1 border border-dandy-300 text-dandy-600 text-sm px-3 py-1.5 rounded-lg hover:bg-dandy-50">
+              <RotateCcw size={14} /> 締め切りを取り消す
+            </button>
+          )}
         </div>
       </div>
 
       {/* 共有URL */}
-      {shareUrl && (
+      {shareUrl && currentMonth && (
         <div className="rounded-xl border overflow-hidden">
           {/* 希望入力URL */}
-          <div className="bg-dandy-500 p-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-white">📝 希望入力URL</span>
-              <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">バイトがシフト希望を送るURL</span>
+          {currentMonth.status === 'closed' ? (
+            <div className="bg-gray-100 p-4 space-y-1">
+              <div className="flex items-center gap-2">
+                <Lock size={14} className="text-gray-400" />
+                <span className="text-sm font-bold text-gray-400">希望入力URL（募集終了）</span>
+              </div>
+              <p className="text-xs text-gray-400">締め切り済みのためバイトはこのURLで回答できません。「締め切りを取り消す」で再公開できます。</p>
             </div>
-            <div className="flex gap-2">
-              <input readOnly value={shareUrl}
-                className="flex-1 text-xs border-0 rounded-lg px-3 py-2 bg-white text-gray-700 font-mono" />
-              <button onClick={() => navigator.clipboard.writeText(shareUrl)}
-                className="text-sm font-bold bg-white text-dandy-600 px-4 py-2 rounded-lg hover:bg-dandy-50 transition-colors shrink-0">
-                コピー
-              </button>
+          ) : (
+            <div className="bg-dandy-500 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-white">📝 希望入力URL</span>
+                <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">バイトがシフト希望を送るURL</span>
+              </div>
+              <div className="flex gap-2">
+                <input readOnly value={shareUrl}
+                  className="flex-1 text-xs border-0 rounded-lg px-3 py-2 bg-white text-gray-700 font-mono" />
+                <button onClick={() => navigator.clipboard.writeText(shareUrl)}
+                  className="text-sm font-bold bg-white text-dandy-600 px-4 py-2 rounded-lg hover:bg-dandy-50 transition-colors shrink-0">
+                  コピー
+                </button>
+              </div>
+              <p className="text-xs text-white/80">↑ 公開・URL発行した直後にLINEで共有してください</p>
             </div>
-            <p className="text-xs text-white/80">↑ 公開・URL発行した直後にLINEで共有してください</p>
-          </div>
+          )}
           {/* 確定シフト閲覧URL */}
           <div className={`p-4 space-y-2 ${publicCalendarUrl ? 'bg-blue-600' : 'bg-gray-100'}`}>
             <div className="flex items-center gap-2">
